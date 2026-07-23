@@ -1,0 +1,518 @@
+# ==========================================================
+# RADAR PEDAGÓGICO URE
+# MÓDULO: excel_final.py
+# Versão: 1.2
+# ==========================================================
+
+from io import BytesIO
+
+import pandas as pd
+
+from openpyxl.styles import (
+    Font,
+    PatternFill,
+    Alignment,
+)
+
+from openpyxl.utils import get_column_letter
+
+from modulos.indicadores import calcular_indicadores
+
+
+# ==========================================================
+# ESTILOS
+# ==========================================================
+
+CABECALHO_FILL = PatternFill(
+    fill_type="solid",
+    fgColor="1F4E79",
+)
+
+CABECALHO_FONT = Font(
+    bold=True,
+    color="FFFFFF",
+)
+
+CENTRO = Alignment(
+    horizontal="center",
+    vertical="center",
+)
+
+ESQUERDA = Alignment(
+    horizontal="left",
+    vertical="center",
+)
+
+# ----------------------------------------------------------
+# Situação
+# ----------------------------------------------------------
+
+COR_PRIORITARIA = PatternFill(
+    fill_type="solid",
+    fgColor="F4CCCC",
+)
+
+COR_ATENCAO = PatternFill(
+    fill_type="solid",
+    fgColor="FFF2CC",
+)
+
+COR_DESTAQUE = PatternFill(
+    fill_type="solid",
+    fgColor="D9EAD3",
+)
+
+COR_SEM_DADOS = PatternFill(
+    fill_type="solid",
+    fgColor="E6E6E6",
+)
+
+
+# ==========================================================
+# GERA EXCEL
+# ==========================================================
+
+def gerar_excel(df: pd.DataFrame) -> BytesIO:
+
+    if df.empty:
+
+        raise ValueError(
+            "O DataFrame consolidado está vazio."
+        )
+
+    indicadores = calcular_indicadores(df)
+
+    buffer = BytesIO()
+
+    with pd.ExcelWriter(
+        buffer,
+        engine="openpyxl",
+    ) as writer:
+
+        # ==================================================
+        # RESUMO EXECUTIVO
+        # ==================================================
+
+        resumo = pd.DataFrame(
+            {
+                "Indicador": [
+                    "Data de geração",
+                    "Avaliações utilizadas",
+                    "Total de escolas",
+                    "Participação ADE",
+                    "Participação PP1",
+                    "Participação PP2",
+                    "Média PP1",
+                    "Média PP2",
+                    "Escolas Prioritárias",
+                    "Escolas em Atenção",
+                    "Escolas Destaque",
+                    "Escolas sem dados",
+                ],
+                "Valor": [
+                    indicadores["DATA_GERACAO"].strftime(
+                        "%d/%m/%Y %H:%M"
+                    ),
+                    ", ".join(
+                        indicadores["AVALIACOES"]
+                    ),
+                    indicadores["TOTAL_ESCOLAS"],
+                    indicadores.get("PART_ADE"),
+                    indicadores.get("PART_PP1"),
+                    indicadores.get("PART_PP2"),
+                    indicadores.get("MEDIA_PP1"),
+                    indicadores.get("MEDIA_PP2"),
+                    indicadores["PRIORITARIA"],
+                    indicadores["ATENCAO"],
+                    indicadores["DESTAQUE"],
+                    indicadores["SEM_DADOS"],
+                ],
+            }
+        )
+
+        resumo.to_excel(
+            writer,
+            sheet_name="RESUMO EXECUTIVO",
+            index=False,
+        )
+
+        ws_resumo = writer.sheets[
+            "RESUMO EXECUTIVO"
+        ]
+
+        # ----------------------------------------------
+        # Cabeçalho
+        # ----------------------------------------------
+
+        for cell in ws_resumo[1]:
+
+            cell.fill = CABECALHO_FILL
+            cell.font = CABECALHO_FONT
+            cell.alignment = CENTRO
+
+        # ----------------------------------------------
+        # Alinhamentos
+        # ----------------------------------------------
+
+        for linha in ws_resumo.iter_rows(
+            min_row=2
+        ):
+
+            linha[0].alignment = ESQUERDA
+            linha[1].alignment = CENTRO
+
+        # ----------------------------------------------
+        # Percentuais
+        # ----------------------------------------------
+
+        percentuais = {
+            "Participação ADE",
+            "Participação PP1",
+            "Participação PP2",
+            "Média PP1",
+            "Média PP2",
+        }
+
+        for row in range(
+            2,
+            ws_resumo.max_row + 1,
+        ):
+
+            indicador = ws_resumo.cell(
+                row=row,
+                column=1,
+            ).value
+
+            if indicador in percentuais:
+
+                ws_resumo.cell(
+                    row=row,
+                    column=2,
+                ).number_format = "0.0%"
+
+        ws_resumo.column_dimensions[
+            "A"
+        ].width = 35
+
+        ws_resumo.column_dimensions[
+            "B"
+        ].width = 25
+
+        ws_resumo.freeze_panes = "A2"
+
+        ws_resumo.auto_filter.ref = (
+            ws_resumo.dimensions
+        )
+
+        # ==================================================
+        # ABA RADAR PEDAGÓGICO
+        # ==================================================
+        # ==================================================
+        # EXPORTAÇÃO DA BASE
+        # ==================================================
+
+        df.to_excel(
+            writer,
+            sheet_name="RADAR PEDAGÓGICO",
+            index=False,
+        )
+
+        ws = writer.sheets["RADAR PEDAGÓGICO"]
+
+        # ==================================================
+        # CABEÇALHO
+        # ==================================================
+
+        for cell in ws[1]:
+
+            cell.fill = CABECALHO_FILL
+            cell.font = CABECALHO_FONT
+            cell.alignment = CENTRO
+
+        # ==================================================
+        # CORPO
+        # ==================================================
+
+        for coluna in ws.columns:
+
+            letra = get_column_letter(
+                coluna[0].column
+            )
+
+            cabecalho = str(
+                coluna[0].value
+            ).strip().upper()
+
+            maior = len(cabecalho)
+
+            for cell in coluna:
+
+                if cell.row > 1:
+
+                    if cabecalho == "ESCOLA":
+
+                        cell.alignment = ESQUERDA
+
+                    else:
+
+                        cell.alignment = CENTRO
+
+                valor = (
+                    ""
+                    if cell.value is None
+                    else str(cell.value)
+                )
+
+                if len(valor) > maior:
+
+                    maior = len(valor)
+
+            # ----------------------------------------------
+            # Largura das colunas
+            # ----------------------------------------------
+
+            if cabecalho == "CIE":
+
+                largura = 10
+
+            elif cabecalho == "ESCOLA":
+
+                largura = 45
+
+            elif cabecalho.startswith("PART"):
+
+                largura = 12
+
+            elif cabecalho.startswith("MEDIA"):
+
+                largura = 10
+
+            elif cabecalho.startswith("LP"):
+
+                largura = 10
+
+            elif cabecalho.startswith("MAT"):
+
+                largura = 10
+
+            elif cabecalho.startswith("FAROL"):
+
+                largura = 8
+
+            elif cabecalho == "SITUACAO":
+
+                largura = 18
+
+            else:
+
+                largura = min(
+                    maior + 3,
+                    40,
+                )
+
+            ws.column_dimensions[
+                letra
+            ].width = largura
+
+        # ==================================================
+        # FORMATAÇÃO DOS PERCENTUAIS
+        # ==================================================
+
+        PREFIXOS_PERCENTUAIS = (
+            "PART_",
+            "MEDIA_",
+            "LP_",
+            "MAT_",
+        )
+
+        for coluna in ws.columns:
+
+            cabecalho = str(
+                coluna[0].value
+            ).strip().upper()
+
+            if cabecalho.startswith(
+                PREFIXOS_PERCENTUAIS
+            ):
+
+                for cell in coluna[1:]:
+
+                    if isinstance(
+                        cell.value,
+                        (int, float),
+                    ):
+
+                        cell.number_format = "0.0%"
+
+        # ==================================================
+        # FORMATAÇÃO DA SITUAÇÃO
+        # ==================================================
+
+        for coluna in ws.columns:
+
+            cabecalho = str(
+                coluna[0].value
+            ).strip().upper()
+
+            if cabecalho == "SITUACAO":
+
+                for cell in coluna[1:]:
+
+                    if cell.value == "PRIORITÁRIA":
+
+                        cell.fill = COR_PRIORITARIA
+
+                    elif cell.value == "ATENÇÃO":
+
+                        cell.fill = COR_ATENCAO
+
+                    elif cell.value == "DESTAQUE":
+
+                        cell.fill = COR_DESTAQUE
+
+                    elif cell.value == "SEM DADOS":
+
+                        cell.fill = COR_SEM_DADOS
+
+        # ==================================================
+        # CONGELA O PAINEL
+        # ==================================================
+
+        ws.freeze_panes = "C2"
+
+        # ==================================================
+        # AUTOFILTRO
+        # ==================================================
+
+        ws.auto_filter.ref = ws.dimensions
+
+# ==================================================
+# ESCOLAS PRIORITÁRIAS
+# ==================================================
+
+df_prioritarias = df[
+    df["SITUACAO"].astype(str).str.contains(
+        "PRIORIT",
+        case=False,
+        na=False,
+    )
+].copy()
+
+if not df_prioritarias.empty:
+
+    # Ordena pelas escolas mais críticas
+    colunas_ordem = []
+
+    if "MEDIA_PP2" in df_prioritarias.columns:
+        colunas_ordem.append("MEDIA_PP2")
+
+    if "PART_PP2" in df_prioritarias.columns:
+        colunas_ordem.append("PART_PP2")
+
+    if "ESCOLA" in df_prioritarias.columns:
+        colunas_ordem.append("ESCOLA")
+
+    if colunas_ordem:
+
+        df_prioritarias.sort_values(
+            by=colunas_ordem,
+            ascending=True,
+            inplace=True,
+        )
+
+    df_prioritarias.to_excel(
+        writer,
+        sheet_name="ESCOLAS PRIORITÁRIAS",
+        index=False,
+    )
+
+    ws = writer.sheets[
+        "ESCOLAS PRIORITÁRIAS"
+    ]
+
+    # Cabeçalho
+
+    for cell in ws[1]:
+
+        cell.fill = CABECALHO_FILL
+        cell.font = CABECALHO_FONT
+        cell.alignment = CENTRO
+
+    # Corpo
+
+    for coluna in ws.columns:
+
+        letra = get_column_letter(
+            coluna[0].column
+        )
+
+        cabecalho = str(
+            coluna[0].value
+        ).upper()
+
+        maior = len(cabecalho)
+
+        for cell in coluna:
+
+            if cell.row > 1:
+
+                if cabecalho == "ESCOLA":
+                    cell.alignment = ESQUERDA
+                else:
+                    cell.alignment = CENTRO
+
+                valor = (
+                    ""
+                    if cell.value is None
+                    else str(cell.value)
+                )
+
+                maior = max(
+                    maior,
+                    len(valor),
+                )
+
+        ws.column_dimensions[
+            letra
+        ].width = min(
+            maior + 3,
+            40,
+        )
+
+    # Percentuais
+
+    for coluna in ws.columns:
+
+        cabecalho = str(
+            coluna[0].value
+        ).upper()
+
+        if cabecalho.startswith(
+            (
+                "PART_",
+                "MEDIA_",
+                "LP_",
+                "MAT_",
+            )
+        ):
+
+            for cell in coluna[1:]:
+
+                if isinstance(
+                    cell.value,
+                    (int, float),
+                ):
+
+                    cell.number_format = "0.0%"
+
+    ws.freeze_panes = "C2"
+
+    ws.auto_filter.ref = ws.dimensions
+
+    # ======================================================
+    # RETORNO
+    # ======================================================
+
+    buffer.seek(0)
+
+    return buffer
