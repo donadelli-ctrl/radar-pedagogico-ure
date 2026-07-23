@@ -2,18 +2,40 @@
 ==========================================================
 RADAR PEDAGÓGICO URE
 MÓDULO: radar.py
-Versão: 1.3
+Versão: 1.4
 ==========================================================
 
 Responsabilidade:
 Gerar a aba RADAR PEDAGÓGICO.
 """
 
-import pandas as pd
-
 from modulos.excel.formatacao import (
     formatar_planilha,
 )
+
+
+# ==========================================================
+# FUNÇÃO AUXILIAR
+# ==========================================================
+
+def gerar_farol(situacao):
+    """
+    Retorna o farol conforme a situação da escola.
+    """
+
+    texto = str(situacao).upper()
+
+    if "PRIORIT" in texto:
+        return "🔴"
+
+    elif "ATEN" in texto:
+        return "🟡"
+
+    elif "DESTAQUE" in texto:
+        return "🟢"
+
+    else:
+        return "⚪"
 
 
 # ==========================================================
@@ -29,8 +51,22 @@ def criar_radar(writer, df):
         return
 
     # ------------------------------------------------------
-    # TESTE TEMPORÁRIO
+    # CRIA COLUNA FAROL
     # ------------------------------------------------------
+
+    if "SITUACAO" in df.columns:
+
+        # evita erro caso o radar seja gerado novamente
+        if "FAROL" in df.columns:
+            df.drop(columns=["FAROL"], inplace=True)
+
+        indice = df.columns.get_loc("SITUACAO")
+
+        df.insert(
+            indice,
+            "FAROL",
+            df["SITUACAO"].apply(gerar_farol),
+        )
 
     # ------------------------------------------------------
     # EXPORTAÇÃO
@@ -42,8 +78,6 @@ def criar_radar(writer, df):
         index=False,
     )
 
-    ws = writer.sheets[
-        "RADAR PEDAGÓGICO"
-    ]
+    ws = writer.sheets["RADAR PEDAGÓGICO"]
 
     formatar_planilha(ws)

@@ -59,6 +59,7 @@ def gerar_excel(df: pd.DataFrame) -> BytesIO:
             df,
         )
 
+        
     buffer.seek(0)
 
     return buffer

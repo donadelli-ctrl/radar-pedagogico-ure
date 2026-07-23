@@ -25,10 +25,12 @@ from openpyxl.utils import get_column_letter
 
 CABECALHO_FILL = PatternFill(
     fill_type="solid",
-    fgColor="1F4E79",
+    fgColor="163A6B",
 )
 
 CABECALHO_FONT = Font(
+    name="Aptos",
+    size=11,
     bold=True,
     color="FFFFFF",
 )
@@ -50,22 +52,22 @@ ESQUERDA = Alignment(
 
 COR_PRIORITARIA = PatternFill(
     fill_type="solid",
-    fgColor="F4CCCC",
+    fgColor="FDECEC",
 )
 
 COR_ATENCAO = PatternFill(
     fill_type="solid",
-    fgColor="FFF2CC",
+    fgColor="FFF8D6",
 )
 
 COR_DESTAQUE = PatternFill(
     fill_type="solid",
-    fgColor="D9EAD3",
+    fgColor="EAF7EA",
 )
 
 COR_SEM_DADOS = PatternFill(
     fill_type="solid",
-    fgColor="E6E6E6",
+    fgColor="F2F2F2",
 )
 
 # ==========================================================
@@ -84,22 +86,22 @@ COR_ADE = PatternFill(
 
 COR_PP1 = PatternFill(
     fill_type="solid",
-    fgColor="FFD966",
+    fgColor="FFE699",
 )
 
 COR_PP2 = PatternFill(
     fill_type="solid",
-    fgColor="F4B183",
+    fgColor="F8CBAD",
 )
 
 COR_ADP = PatternFill(
     fill_type="solid",
-    fgColor="C9A0DC",
+    fgColor="D9C2E9",
 )
 
 COR_PP3 = PatternFill(
     fill_type="solid",
-    fgColor="9DC3E6",
+    fgColor="BDD7EE",
 )
 
 COR_SITUACAO = PatternFill(
@@ -253,7 +255,7 @@ def formatar_planilha(ws):
 
         elif cabecalho.startswith("FAROL"):
 
-            largura = 8
+            largura = 6
 
         elif cabecalho == "SITUACAO":
 
@@ -305,6 +307,57 @@ def formatar_planilha(ws):
             elif "SEM DADOS" in valor:
 
                 cell.fill = COR_SEM_DADOS
+
+    # ======================================================
+    # FORMATAÇÃO DOS INDICADORES
+    # ======================================================
+
+    for coluna in ws.columns:
+
+        cabecalho = str(coluna[0].value).strip().upper()
+
+        if not (
+            cabecalho.startswith("LP")
+            or cabecalho.startswith("MAT")
+            or cabecalho.startswith("PART")
+        ):
+            continue
+
+        for cell in coluna[1:]:
+
+            if not isinstance(cell.value, (int, float)):
+                continue
+
+            valor = cell.value
+
+            # Caso venha em decimal (0,75)
+            if valor <= 1:
+                valor *= 100
+
+            if cabecalho.startswith("PART"):
+
+                if valor < 90:
+                    cell.fill = COR_PRIORITARIA
+
+                elif valor < 95:
+                    cell.fill = COR_ATENCAO
+
+                else:
+                    cell.fill = COR_DESTAQUE
+
+            else:
+
+                if valor < 50:
+                    cell.fill = COR_PRIORITARIA
+
+                elif valor < 70:
+                    cell.fill = COR_ATENCAO
+
+                elif valor < 90:
+                    cell.fill = COR_DESTAQUE
+
+                else:
+                    cell.fill = COR_PP3
 
     # ======================================================
     # FINALIZAÇÃO
