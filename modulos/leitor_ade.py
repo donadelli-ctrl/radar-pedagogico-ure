@@ -1,9 +1,4 @@
 """
-==========================================================
-RADAR PEDAGÓGICO URE
-Módulo: leitor_ade.py
-==========================================================
-
 Responsabilidade:
 Ler a planilha ADE e devolver um DataFrame padronizado.
 """
@@ -15,7 +10,48 @@ from modulos.utils import (
     padronizar_escola,
     converter_numero,
     validar_colunas,
+    padronizar_texto,
 )
+
+
+# ==========================================================
+# LOCALIZAÇÃO DAS COLUNAS ADE
+# ==========================================================
+
+def _localizar_colunas_nivel(df, nome_base):
+    """
+    Localiza as duas ocorrências de uma coluna da ADE.
+
+    A estrutura atual da ADE possui:
+
+        Abaixo do Básico
+        Básico
+        Proficiente
+
+        Abaixo do Básico.1
+        Básico.1
+        Proficiente.1
+
+    O primeiro conjunto corresponde a LP.
+    O segundo conjunto corresponde a MAT.
+    """
+
+    resultado = []
+
+    nome_padrao = padronizar_texto(nome_base)
+
+    for coluna in df.columns:
+
+        coluna_padrao = padronizar_texto(coluna)
+
+        if coluna_padrao == nome_padrao:
+            resultado.append(coluna)
+            continue
+
+        if coluna_padrao.startswith(nome_padrao + "."):
+            resultado.append(coluna)
+
+    return resultado
 
 
 # ==========================================================
@@ -25,6 +61,20 @@ from modulos.utils import (
 def ler_ADE(arquivo):
     """
     Lê a planilha ADE e devolve um DataFrame padronizado.
+
+    Retorno:
+
+        CIE
+        ESCOLA
+        PART_ADE
+
+        LP_ABAIXO
+        LP_BASICO
+        LP_PROFICIENTE
+
+        MAT_ABAIXO
+        MAT_BASICO
+        MAT_PROFICIENTE
     """
 
     # ------------------------------------------------------
@@ -33,14 +83,14 @@ def ler_ADE(arquivo):
 
     df = pd.read_excel(arquivo)
 
-    print("\n===== ADE ORIGINAL =====")
-    print(df.head(10))
-    print("========================\n")
-
-    df.columns = [str(col).strip() for col in df.columns]
+    # Padroniza apenas os nomes das colunas
+    df.columns = [
+        str(coluna).strip()
+        for coluna in df.columns
+    ]
 
     # ------------------------------------------------------
-    # Validação
+    # Validação das colunas principais
     # ------------------------------------------------------
 
     validar_colunas(
@@ -53,10 +103,13 @@ def ler_ADE(arquivo):
     )
 
     # ------------------------------------------------------
-    # Localiza colunas principais
+    # Localiza as colunas principais
     # ------------------------------------------------------
 
-    col_cie = localizar_coluna(df, ["CIE"])
+    col_cie = localizar_coluna(
+        df,
+        ["CIE"],
+    )
 
     col_escola = localizar_coluna(
         df,
@@ -68,14 +121,61 @@ def ler_ADE(arquivo):
         [
             "PARTICIPACAO",
             "PARTICIPAÇÃO",
+            "(%) PARTICIPACAO",
+            "(%) PARTICIPAÇÃO",
         ],
     )
 
     # ------------------------------------------------------
-    # Monta a base
+    # Localiza os dois conjuntos de níveis
+    # ------------------------------------------------------
+
+    col_ab = _localizar_colunas_nivel(
+        df,
+        "ABAIXO DO BÁSICO",
+    )
+
+    col_bas = _localizar_colunas_nivel(
+        df,
+        "BÁSICO",
+    )
+
+    col_prof = _localizar_colunas_nivel(
+        df,
+        "PROFICIENTE",
+    )
+
+    # ------------------------------------------------------
+    # Validação da estrutura da ADE
+    # ------------------------------------------------------
+
+    if len(col_ab) < 2:
+        raise ValueError(
+            "A ADE não apresentou as duas colunas "
+            "esperadas para 'Abaixo do Básico'."
+        )
+
+    if len(col_bas) < 2:
+        raise ValueError(
+            "A ADE não apresentou as duas colunas "
+            "esperadas para 'Básico'."
+        )
+
+    if len(col_prof) < 2:
+        raise ValueError(
+            "A ADE não apresentou as duas colunas "
+            "esperadas para 'Proficiente'."
+        )
+
+    # ------------------------------------------------------
+    # Monta a base padronizada
     # ------------------------------------------------------
 
     base = pd.DataFrame()
+
+    # ------------------------------------------------------
+    # CIE
+    # ------------------------------------------------------
 
     base["CIE"] = (
         pd.to_numeric(
@@ -85,10 +185,18 @@ def ler_ADE(arquivo):
         .astype("Int64")
     )
 
+    # ------------------------------------------------------
+    # ESCOLA
+    # ------------------------------------------------------
+
     base["ESCOLA"] = (
         df[col_escola]
         .apply(padronizar_escola)
     )
+
+    # ------------------------------------------------------
+    # PARTICIPAÇÃO
+    # ------------------------------------------------------
 
     base["PART_ADE"] = (
         df[col_part]
@@ -96,59 +204,57 @@ def ler_ADE(arquivo):
     )
 
     # ------------------------------------------------------
-    # Língua Portuguesa
+    # LÍNGUA PORTUGUESA
+    #
+    # Primeiro conjunto encontrado na ADE
     # ------------------------------------------------------
 
     base["LP_ABAIXO"] = (
-        df.iloc[:, 3]
+        df[col_ab[0]]
         .apply(converter_numero)
     )
 
     base["LP_BASICO"] = (
-        df.iloc[:, 4]
+        df[col_bas[0]]
         .apply(converter_numero)
     )
 
     base["LP_PROFICIENTE"] = (
-        df.iloc[:, 5]
+        df[col_prof[0]]
         .apply(converter_numero)
     )
 
     # ------------------------------------------------------
-    # Matemática
+    # MATEMÁTICA
+    #
+    # Segundo conjunto encontrado na ADE
     # ------------------------------------------------------
 
     base["MAT_ABAIXO"] = (
-        df.iloc[:, 6]
+        df[col_ab[1]]
         .apply(converter_numero)
     )
 
     base["MAT_BASICO"] = (
-        df.iloc[:, 7]
+        df[col_bas[1]]
         .apply(converter_numero)
     )
 
     base["MAT_PROFICIENTE"] = (
-        df.iloc[:, 8]
+        df[col_prof[1]]
         .apply(converter_numero)
     )
 
     # ------------------------------------------------------
-    # Remove linhas sem escola
+    # LIMPEZA DOS REGISTROS
     # ------------------------------------------------------
 
-    # ------------------------------------------------------
-    # Remove linhas inválidas
-    # ------------------------------------------------------
-
-    # Remove espaços
     base["ESCOLA"] = (
         base["ESCOLA"]
         .astype(str)
         .str.strip()
     )
 
-    # Remove textos que representam vazio
     base = base[
         ~base["ESCOLA"].isin(
             [
@@ -160,12 +266,30 @@ def ler_ADE(arquivo):
         )
     ]
 
-    # Remove registros sem CIE
+    # ------------------------------------------------------
+    # Mantém somente registros com CIE válido
+    # ------------------------------------------------------
+
     base = base[
         base["CIE"].notna()
     ]
 
+    # ------------------------------------------------------
+    # Remove duplicidades de escola/CIE
+    # ------------------------------------------------------
+
+    base = (
+        base
+        .drop_duplicates(
+            subset=["CIE"],
+            keep="first",
+        )
+    )
+
+    # ------------------------------------------------------
     # Reinicia o índice
+    # ------------------------------------------------------
+
     base.reset_index(
         drop=True,
         inplace=True,
