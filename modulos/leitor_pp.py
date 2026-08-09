@@ -1,14 +1,10 @@
 """
-==========================================================
-RADAR PEDAGÓGICO URE
-Módulo: leitor_pp.py
-==========================================================
-
 Responsabilidade:
 Ler arquivos da Prova Paulista (PP1, PP2, ADP e PP3)
 e devolver um DataFrame padronizado.
 """
 
+import re
 import pandas as pd
 
 from modulos.utils import (
@@ -19,17 +15,92 @@ from modulos.utils import (
 
 
 # ==========================================================
+# EXTRAÇÃO DO CIE
+# ==========================================================
+
+def extrair_cie(valor):
+    """
+    Extrai o CIE quando ele aparece no final do nome da escola.
+
+    Exemplo:
+
+        ALTIMIRA PINKE PROFESSORA - 916024
+        ↓
+        916024
+
+    Quando não for possível identificar o CIE,
+    retorna <NA>.
+    """
+
+    if pd.isna(valor):
+        return pd.NA
+
+    texto = str(valor).strip()
+
+    encontrado = re.search(
+        r"-\s*(\d+)\s*$",
+        texto,
+    )
+
+    if not encontrado:
+        return pd.NA
+
+    try:
+        return int(encontrado.group(1))
+    except (ValueError, TypeError):
+        return pd.NA
+
+
+# ==========================================================
 # LEITOR DA PROVA PAULISTA
 # ==========================================================
 
 def ler_PP(arquivo, avaliacao):
     """
-    Lê uma avaliação (PP1, PP2, ADP ou PP3)
+    Lê uma avaliação da Prova Paulista:
+
+        PP1
+        PP2
+        ADP
+        PP3
+
     e devolve um DataFrame padronizado.
+
+    Estrutura principal:
+
+        CIE
+        ESCOLA
+        PART_{avaliacao}
+        MEDIA_{avaliacao}
+        LP_{avaliacao}
+        MAT_{avaliacao}
+
+    Quando a avaliação possuir Farol SARESP de origem,
+    ele será preservado separadamente como:
+
+        FAROL_SEDUC_{avaliacao}
+
+    Esse indicador NÃO é utilizado para calcular
+    o Farol da URE.
     """
 
     if arquivo is None:
         return None
+
+    avaliacao = str(avaliacao).strip().upper()
+
+    avaliacoes_validas = {
+        "PP1",
+        "PP2",
+        "ADP",
+        "PP3",
+    }
+
+    if avaliacao not in avaliacoes_validas:
+        raise ValueError(
+            "Avaliação inválida. "
+            "Utilize PP1, PP2, ADP ou PP3."
+        )
 
     # ------------------------------------------------------
     # Leitura
@@ -37,7 +108,10 @@ def ler_PP(arquivo, avaliacao):
 
     df = pd.read_excel(arquivo)
 
-    df.columns = [str(col).strip() for col in df.columns]
+    df.columns = [
+        str(coluna).strip()
+        for coluna in df.columns
+    ]
 
     # ------------------------------------------------------
     # Localização das colunas
@@ -54,6 +128,8 @@ def ler_PP(arquivo, avaliacao):
     col_part = localizar_coluna(
         df,
         [
+            "(%) DE PARTICIPAÇÃO",
+            "(%) PARTICIPAÇÃO",
             "PARTICIPAÇÃO",
             "PARTICIPACAO",
         ],
@@ -62,6 +138,8 @@ def ler_PP(arquivo, avaliacao):
     col_media = localizar_coluna(
         df,
         [
+            "(%) DE ACERTOS",
+            "(%) ACERTOS",
             "ACERTOS",
         ],
     )
@@ -70,6 +148,8 @@ def ler_PP(arquivo, avaliacao):
         df,
         [
             "MAT",
+            "MATEMÁTICA",
+            "MATEMATICA",
         ],
     )
 
@@ -77,15 +157,25 @@ def ler_PP(arquivo, avaliacao):
         df,
         [
             "PORT",
+            "PORTUGUÊS",
+            "PORTUGUES",
+            "LP",
+            "LÍNGUA PORTUGUESA",
+            "LINGUA PORTUGUESA",
         ],
     )
 
-    # O Farol pode não existir
+    # ------------------------------------------------------
+    # Farol SARESP original
+    #
+    # Pode existir na PP2, mas não necessariamente
+    # nas demais avaliações.
+    # ------------------------------------------------------
+
     col_farol = localizar_coluna(
         df,
         [
             "FAROL SARESP",
-            "FAROL",
         ],
     )
 
@@ -113,7 +203,8 @@ def ler_PP(arquivo, avaliacao):
     if faltando:
 
         raise ValueError(
-            "As seguintes colunas não foram encontradas:\n\n"
+            "As seguintes colunas não foram encontradas "
+            f"na avaliação {avaliacao}:\n\n"
             + "\n".join(faltando)
         )
 
@@ -123,25 +214,55 @@ def ler_PP(arquivo, avaliacao):
 
     base = pd.DataFrame()
 
+    # ------------------------------------------------------
+    # CIE
+    # ------------------------------------------------------
+
+    base["CIE"] = (
+        df[col_escola]
+        .apply(extrair_cie)
+        .astype("Int64")
+    )
+
+    # ------------------------------------------------------
+    # ESCOLA
+    # ------------------------------------------------------
+
     base["ESCOLA"] = (
         df[col_escola]
         .apply(padronizar_escola)
     )
+
+    # ------------------------------------------------------
+    # PARTICIPAÇÃO
+    # ------------------------------------------------------
 
     base[f"PART_{avaliacao}"] = (
         df[col_part]
         .apply(converter_numero)
     )
 
+    # ------------------------------------------------------
+    # MÉDIA / % DE ACERTOS
+    # ------------------------------------------------------
+
     base[f"MEDIA_{avaliacao}"] = (
         df[col_media]
         .apply(converter_numero)
     )
 
+    # ------------------------------------------------------
+    # LÍNGUA PORTUGUESA
+    # ------------------------------------------------------
+
     base[f"LP_{avaliacao}"] = (
         df[col_lp]
         .apply(converter_numero)
     )
+
+    # ------------------------------------------------------
+    # MATEMÁTICA
+    # ------------------------------------------------------
 
     base[f"MAT_{avaliacao}"] = (
         df[col_mat]
@@ -149,32 +270,91 @@ def ler_PP(arquivo, avaliacao):
     )
 
     # ------------------------------------------------------
-    # Farol (opcional)
+    # FAROL SARESP DE ORIGEM
+    #
+    # Preserva o valor original da SEDUC.
+    #
+    # NÃO participa do cálculo do nosso Farol da URE.
     # ------------------------------------------------------
 
     if col_farol is not None:
 
-        base[f"FAROL_{avaliacao}"] = (
-            df[col_farol]
-            .apply(converter_numero)
+        base[f"FAROL_SEDUC_{avaliacao}"] = (
+            pd.to_numeric(
+                df[col_farol],
+                errors="coerce",
+            )
             .astype("Int64")
         )
 
-    else:
-
-        base[f"FAROL_{avaliacao}"] = pd.Series(
-            [pd.NA] * len(base),
-            dtype="Int64",
-        )
-
     # ------------------------------------------------------
-    # Limpeza
+    # LIMPEZA
     # ------------------------------------------------------
 
-    base.dropna(
-        subset=["ESCOLA"],
-        inplace=True,
+    base["ESCOLA"] = (
+    base["ESCOLA"]
+    .astype(str)
+    .str.strip()
+
     )
+
+    # ------------------------------------------------------
+    # Remove registros administrativos da planilha
+    # ------------------------------------------------------
+
+    marcadores_invalidos = [
+        "",
+        "NAN",
+        "NONE",
+        "<NA>",
+        "TOTAL",
+    ]
+
+    base = base[
+        ~base["ESCOLA"].isin(marcadores_invalidos)
+    ]
+
+    # Remove a linha que contém informações dos filtros
+    base = base[
+        ~base["ESCOLA"].str.startswith(
+            "FILTROS APLICADOS",
+            na=False,
+        )
+    ]
+
+    # ------------------------------------------------------
+    # Remove registros sem CIE somente quando
+    # a identificação não estiver disponível.
+    #
+    # A escola continua sendo mantida porque,
+    # em avaliações futuras, podemos receber arquivos
+    # sem o CIE no nome.
+    # ------------------------------------------------------
+
+    # ------------------------------------------------------
+    # Remove duplicidades
+    # ------------------------------------------------------
+
+    base = (
+        base
+        .drop_duplicates(
+            subset=["CIE", "ESCOLA"],
+            keep="first",
+        )
+    )
+
+    # ------------------------------------------------------
+    # Ordenação
+    # ------------------------------------------------------
+
+    base = base.sort_values(
+        by="ESCOLA",
+        kind="stable",
+    )
+
+    # ------------------------------------------------------
+    # Reinicia o índice
+    # ------------------------------------------------------
 
     base.reset_index(
         drop=True,
