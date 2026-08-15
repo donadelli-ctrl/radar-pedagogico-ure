@@ -2,7 +2,7 @@
 ==========================================================
 RADAR PEDAGÓGICO URE
 MÓDULO: radar.py
-Versão: 3.3
+Versão: 3.4
 ==========================================================
 
 Responsabilidade:
@@ -50,6 +50,9 @@ COR_PARTICIPACAO = "D6E4F0"
 COR_EVOLUCAO = "B4C7E7"
 
 COR_GERAL = "D9EAF4"
+
+COR_FUNDO_DIAGNOSTICO = "FFFFFF"
+COR_FUNDO_ENCAMINHAMENTO = "F3F8FC"
 
 
 # ==========================================================
@@ -132,7 +135,7 @@ FONTE_CABECALHO = Font(
 
 FONTE_TEXTO_LONGO = Font(
     name="Aptos",
-    size=10,
+    size=9,
     color="000000",
 )
 
@@ -582,7 +585,7 @@ def calcular_altura_linha(
 
         return 66
 
-    return 78
+    return 66
 
 
 # ==========================================================
@@ -878,6 +881,11 @@ def criar_radar(
                 wrap_text=True,
             )
 
+            celula.fill = PatternFill(
+                fill_type="solid",
+                fgColor=COR_FUNDO_DIAGNOSTICO,
+            )
+
         # --------------------------------------------------
         # ENCAMINHAMENTO
         # --------------------------------------------------
@@ -895,6 +903,11 @@ def criar_radar(
                 horizontal="left",
                 vertical="top",
                 wrap_text=True,
+            )
+
+            celula.fill = PatternFill(
+                fill_type="solid",
+                fgColor=COR_FUNDO_ENCAMINHAMENTO,
             )
 
         # --------------------------------------------------
