@@ -1,11 +1,24 @@
 """
+==========================================================
+RADAR PEDAGÓGICO URE
+MÓDULO: indicadores.py
+Versão: 2.0
+==========================================================
+
 Responsabilidade:
 Calcular os principais indicadores do Radar Pedagógico URE.
 
-A função deste módulo é medir os dados.
+Este módulo mede os dados.
 
 A classificação do Farol, diagnóstico e encaminhamento
-serão realizados em etapas posteriores.
+são realizados em etapas próprias.
+
+IMPORTANTE:
+
+O Farol utilizado pelo Radar é o FAROL_URE.
+
+O FAROL SARESP da Prova Paulista não é utilizado
+para classificação da escola.
 """
 
 from datetime import datetime
@@ -34,7 +47,7 @@ def obter_ultima_avaliacao(linha):
     """
     Identifica a última avaliação disponível para a escola.
 
-    A ordem de prioridade é:
+    Ordem:
 
         PP3
         ADP
@@ -45,13 +58,18 @@ def obter_ultima_avaliacao(linha):
 
     for avaliacao in reversed(AVALIACOES):
 
-        coluna_participacao = f"PART_{avaliacao}"
+        coluna_participacao = (
+            f"PART_{avaliacao}"
+        )
 
         if coluna_participacao in linha.index:
 
-            valor = linha[coluna_participacao]
+            valor = linha[
+                coluna_participacao
+            ]
 
             if pd.notna(valor):
+
                 return avaliacao
 
     return None
@@ -61,17 +79,22 @@ def obter_ultima_avaliacao(linha):
 # EVOLUÇÃO
 # ==========================================================
 
-def calcular_evolucao(linha, componente):
+def calcular_evolucao(
+    linha,
+    componente,
+):
     """
-    Calcula a evolução entre as duas últimas avaliações
-    disponíveis para o componente informado.
+    Calcula a evolução entre as duas últimas
+    avaliações disponíveis.
 
     Componente:
+
         LP
         MAT
 
     Retorno:
-        diferença em pontos percentuais na escala decimal.
+
+        diferença em escala decimal.
 
     Exemplo:
 
@@ -90,22 +113,36 @@ def calcular_evolucao(linha, componente):
         "PP3",
     ]:
 
-        coluna = f"{componente}_{avaliacao}"
+        coluna = (
+            f"{componente}_{avaliacao}"
+        )
 
         if coluna in linha.index:
 
             valor = linha[coluna]
 
             if pd.notna(valor):
+
                 avaliacoes_disponiveis.append(
-                    (avaliacao, float(valor))
+                    (
+                        avaliacao,
+                        float(valor),
+                    )
                 )
 
-    if len(avaliacoes_disponiveis) < 2:
+    if len(
+        avaliacoes_disponiveis
+    ) < 2:
+
         return pd.NA
 
-    anterior = avaliacoes_disponiveis[-2][1]
-    atual = avaliacoes_disponiveis[-1][1]
+    anterior = (
+        avaliacoes_disponiveis[-2][1]
+    )
+
+    atual = (
+        avaliacoes_disponiveis[-1][1]
+    )
 
     return atual - anterior
 
@@ -114,32 +151,48 @@ def calcular_evolucao(linha, componente):
 # EVOLUÇÃO DA PARTICIPAÇÃO
 # ==========================================================
 
-def calcular_evolucao_participacao(linha):
+def calcular_evolucao_participacao(
+    linha,
+):
     """
-    Calcula a evolução da participação entre as duas
-    últimas avaliações disponíveis.
+    Calcula a evolução da participação entre
+    as duas últimas avaliações disponíveis.
     """
 
     avaliacoes_disponiveis = []
 
     for avaliacao in AVALIACOES:
 
-        coluna = f"PART_{avaliacao}"
+        coluna = (
+            f"PART_{avaliacao}"
+        )
 
         if coluna in linha.index:
 
             valor = linha[coluna]
 
             if pd.notna(valor):
+
                 avaliacoes_disponiveis.append(
-                    (avaliacao, float(valor))
+                    (
+                        avaliacao,
+                        float(valor),
+                    )
                 )
 
-    if len(avaliacoes_disponiveis) < 2:
+    if len(
+        avaliacoes_disponiveis
+    ) < 2:
+
         return pd.NA
 
-    anterior = avaliacoes_disponiveis[-2][1]
-    atual = avaliacoes_disponiveis[-1][1]
+    anterior = (
+        avaliacoes_disponiveis[-2][1]
+    )
+
+    atual = (
+        avaliacoes_disponiveis[-1][1]
+    )
 
     return atual - anterior
 
@@ -148,36 +201,42 @@ def calcular_evolucao_participacao(linha):
 # INDICADORES POR ESCOLA
 # ==========================================================
 
-def calcular_indicadores_escolas(base: pd.DataFrame) -> pd.DataFrame:
+def calcular_indicadores_escolas(
+    base: pd.DataFrame,
+) -> pd.DataFrame:
     """
     Calcula os indicadores individuais de cada escola.
 
     Esta função NÃO classifica o Farol.
 
-    Ela apenas transforma os dados consolidados em
-    indicadores objetivos que serão utilizados
-    posteriormente pelo Farol, diagnóstico e encaminhamento.
+    Ela prepara os indicadores que serão utilizados
+    pelo Farol, diagnóstico e encaminhamento.
     """
 
     if base is None or base.empty:
+
         return base
 
     resultado = base.copy()
 
-    # ------------------------------------------------------
-    # Última avaliação disponível
-    # ------------------------------------------------------
+    # ======================================================
+    # ÚLTIMA AVALIAÇÃO DISPONÍVEL
+    # ======================================================
 
-    resultado["ULTIMA_AVALIACAO"] = resultado.apply(
+    resultado[
+        "ULTIMA_AVALIACAO"
+    ] = resultado.apply(
         obter_ultima_avaliacao,
         axis=1,
     )
 
-    # ------------------------------------------------------
-    # Evolução de LP
-    # ------------------------------------------------------
+    # ======================================================
+    # EVOLUÇÃO DE LP
+    # ======================================================
 
-    resultado["EVOLUCAO_LP"] = resultado.apply(
+    resultado[
+        "EVOLUCAO_LP"
+    ] = resultado.apply(
         lambda linha: calcular_evolucao(
             linha,
             "LP",
@@ -185,11 +244,13 @@ def calcular_indicadores_escolas(base: pd.DataFrame) -> pd.DataFrame:
         axis=1,
     )
 
-    # ------------------------------------------------------
-    # Evolução de MAT
-    # ------------------------------------------------------
+    # ======================================================
+    # EVOLUÇÃO DE MAT
+    # ======================================================
 
-    resultado["EVOLUCAO_MAT"] = resultado.apply(
+    resultado[
+        "EVOLUCAO_MAT"
+    ] = resultado.apply(
         lambda linha: calcular_evolucao(
             linha,
             "MAT",
@@ -197,37 +258,51 @@ def calcular_indicadores_escolas(base: pd.DataFrame) -> pd.DataFrame:
         axis=1,
     )
 
-    # ------------------------------------------------------
-    # Evolução da participação
-    # ------------------------------------------------------
+    # ======================================================
+    # EVOLUÇÃO DA PARTICIPAÇÃO
+    # ======================================================
 
-    resultado["EVOLUCAO_PARTICIPACAO"] = (
-        resultado.apply(
-            calcular_evolucao_participacao,
-            axis=1,
-        )
+    resultado[
+        "EVOLUCAO_PARTICIPACAO"
+    ] = resultado.apply(
+        calcular_evolucao_participacao,
+        axis=1,
     )
 
-    # ------------------------------------------------------
-    # Indicadores da última avaliação
-    #
-    # São preenchidos dinamicamente.
-    # ------------------------------------------------------
+    # ======================================================
+    # VALOR DA ÚLTIMA AVALIAÇÃO
+    # ======================================================
 
-    def obter_valor_ultima(linha, prefixo):
-        avaliacao = linha["ULTIMA_AVALIACAO"]
+    def obter_valor_ultima(
+        linha,
+        prefixo,
+    ):
+
+        avaliacao = (
+            linha["ULTIMA_AVALIACAO"]
+        )
 
         if not avaliacao:
+
             return pd.NA
 
-        coluna = f"{prefixo}_{avaliacao}"
+        coluna = (
+            f"{prefixo}_{avaliacao}"
+        )
 
         if coluna not in linha.index:
+
             return pd.NA
 
         return linha[coluna]
 
-    resultado["PARTICIPACAO_ATUAL"] = resultado.apply(
+    # ------------------------------------------------------
+    # PARTICIPAÇÃO ATUAL
+    # ------------------------------------------------------
+
+    resultado[
+        "PARTICIPACAO_ATUAL"
+    ] = resultado.apply(
         lambda linha: obter_valor_ultima(
             linha,
             "PART",
@@ -235,7 +310,13 @@ def calcular_indicadores_escolas(base: pd.DataFrame) -> pd.DataFrame:
         axis=1,
     )
 
-    resultado["LP_ATUAL"] = resultado.apply(
+    # ------------------------------------------------------
+    # LP ATUAL
+    # ------------------------------------------------------
+
+    resultado[
+        "LP_ATUAL"
+    ] = resultado.apply(
         lambda linha: obter_valor_ultima(
             linha,
             "LP",
@@ -243,7 +324,13 @@ def calcular_indicadores_escolas(base: pd.DataFrame) -> pd.DataFrame:
         axis=1,
     )
 
-    resultado["MAT_ATUAL"] = resultado.apply(
+    # ------------------------------------------------------
+    # MAT ATUAL
+    # ------------------------------------------------------
+
+    resultado[
+        "MAT_ATUAL"
+    ] = resultado.apply(
         lambda linha: obter_valor_ultima(
             linha,
             "MAT",
@@ -251,7 +338,13 @@ def calcular_indicadores_escolas(base: pd.DataFrame) -> pd.DataFrame:
         axis=1,
     )
 
-    resultado["MEDIA_ATUAL"] = resultado.apply(
+    # ------------------------------------------------------
+    # MÉDIA ATUAL
+    # ------------------------------------------------------
+
+    resultado[
+        "MEDIA_ATUAL"
+    ] = resultado.apply(
         lambda linha: obter_valor_ultima(
             linha,
             "MEDIA",
@@ -259,89 +352,120 @@ def calcular_indicadores_escolas(base: pd.DataFrame) -> pd.DataFrame:
         axis=1,
     )
 
-    # ------------------------------------------------------
-    # Diferença LP x MAT na avaliação atual
-    # ------------------------------------------------------
+    # ======================================================
+    # DIFERENÇA LP X MAT
+    # ======================================================
 
-    resultado["DIF_LP_MAT_ATUAL"] = (
+    resultado[
+        "DIF_LP_MAT_ATUAL"
+    ] = (
         resultado["LP_ATUAL"]
         - resultado["MAT_ATUAL"]
     )
 
-    # ------------------------------------------------------
-    # Quantidade de avaliações disponíveis
-    # ------------------------------------------------------
+    # ======================================================
+    # QUANTIDADE DE AVALIAÇÕES
+    # ======================================================
 
-    def contar_avaliacoes(linha):
+    def contar_avaliacoes(
+        linha,
+    ):
+
         total = 0
 
         for avaliacao in AVALIACOES:
 
-            coluna = f"PART_{avaliacao}"
+            coluna = (
+                f"PART_{avaliacao}"
+            )
 
             if coluna in linha.index:
 
-                if pd.notna(linha[coluna]):
+                if pd.notna(
+                    linha[coluna]
+                ):
+
                     total += 1
 
         return total
 
-    resultado["QTD_AVALIACOES"] = resultado.apply(
+    resultado[
+        "QTD_AVALIACOES"
+    ] = resultado.apply(
         contar_avaliacoes,
         axis=1,
     )
 
-    # ------------------------------------------------------
-    # Indicadores de presença de histórico
-    # ------------------------------------------------------
+    # ======================================================
+    # PRESENÇA DAS AVALIAÇÕES
+    # ======================================================
 
     resultado["TEM_ADE"] = (
         resultado["PART_ADE"].notna()
-        if "PART_ADE" in resultado.columns
+        if "PART_ADE"
+        in resultado.columns
         else False
     )
 
     resultado["TEM_PP1"] = (
         resultado["PART_PP1"].notna()
-        if "PART_PP1" in resultado.columns
+        if "PART_PP1"
+        in resultado.columns
         else False
     )
 
     resultado["TEM_PP2"] = (
         resultado["PART_PP2"].notna()
-        if "PART_PP2" in resultado.columns
+        if "PART_PP2"
+        in resultado.columns
         else False
     )
 
     resultado["TEM_ADP"] = (
         resultado["PART_ADP"].notna()
-        if "PART_ADP" in resultado.columns
+        if "PART_ADP"
+        in resultado.columns
         else False
     )
 
     resultado["TEM_PP3"] = (
         resultado["PART_PP3"].notna()
-        if "PART_PP3" in resultado.columns
+        if "PART_PP3"
+        in resultado.columns
         else False
     )
 
-    # ------------------------------------------------------
-    # Situação do histórico
-    # ------------------------------------------------------
+    # ======================================================
+    # SITUAÇÃO DO HISTÓRICO
+    # ======================================================
 
-    def definir_historico(linha):
+    def definir_historico(
+        linha,
+    ):
 
-        quantidade = linha["QTD_AVALIACOES"]
+        quantidade = (
+            linha["QTD_AVALIACOES"]
+        )
 
         if quantidade <= 1:
-            return "NOVA_NO_ACOMPANHAMENTO"
+
+            return (
+                "NOVA_NO_ACOMPANHAMENTO"
+            )
 
         if quantidade == 2:
-            return "HISTORICO_INICIAL"
 
-        return "HISTORICO_CONSOLIDADO"
+            return (
+                "HISTORICO_INICIAL"
+            )
 
-    resultado["SITUACAO_HISTORICO"] = resultado.apply(
+        return (
+            "HISTORICO_CONSOLIDADO"
+        )
+
+    resultado[
+        "SITUACAO_HISTORICO"
+    ] = resultado.apply(
         definir_historico,
         axis=1,
     )
@@ -353,68 +477,122 @@ def calcular_indicadores_escolas(base: pd.DataFrame) -> pd.DataFrame:
 # INDICADORES GERAIS DA URE
 # ==========================================================
 
-def calcular_indicadores(base: pd.DataFrame) -> dict:
+def calcular_indicadores(
+    base: pd.DataFrame,
+) -> dict:
     """
     Calcula os indicadores gerais da URE.
 
-    A função mantém o retorno em formato de dicionário
-    para compatibilidade com o Resumo Executivo.
+    IMPORTANTE:
 
-    A classificação do Farol NÃO é realizada aqui.
+    A classificação principal é obtida diretamente
+    da coluna FAROL_URE.
+
+    O Farol SARESP da SEDUC não é utilizado.
+
+    Também são calculados separadamente os destaques
+    de evolução.
     """
 
     indicadores = {}
 
+    # ======================================================
+    # BASE VAZIA
+    # ======================================================
+
     if base is None or base.empty:
 
-        indicadores["DATA_GERACAO"] = datetime.now()
-        indicadores["TOTAL_ESCOLAS"] = 0
-        indicadores["AVALIACOES"] = []
+        indicadores[
+            "DATA_GERACAO"
+        ] = datetime.now()
+
+        indicadores[
+            "TOTAL_ESCOLAS"
+        ] = 0
+
+        indicadores[
+            "AVALIACOES"
+        ] = []
+
+        indicadores[
+            "PRIORITARIA"
+        ] = 0
+
+        indicadores[
+            "ATENCAO"
+        ] = 0
+
+        indicadores[
+            "FAVORAVEL"
+        ] = 0
+
+        indicadores[
+            "DESTAQUE_EVOLUCAO"
+        ] = 0
+
+        indicadores[
+            "SEM_HISTORICO"
+        ] = 0
 
         return indicadores
 
-    # ------------------------------------------------------
-    # Informações gerais
-    # ------------------------------------------------------
+    # ======================================================
+    # INFORMAÇÕES GERAIS
+    # ======================================================
 
-    indicadores["DATA_GERACAO"] = datetime.now()
+    indicadores[
+        "DATA_GERACAO"
+    ] = datetime.now()
 
-    indicadores["TOTAL_ESCOLAS"] = len(base)
+    indicadores[
+        "TOTAL_ESCOLAS"
+    ] = len(base)
 
-    # ------------------------------------------------------
-    # Avaliações disponíveis
-    # ------------------------------------------------------
+    # ======================================================
+    # AVALIAÇÕES DISPONÍVEIS
+    # ======================================================
 
     avaliacoes = []
 
     for avaliacao in AVALIACOES:
 
-        coluna = f"PART_{avaliacao}"
+        coluna = (
+            f"PART_{avaliacao}"
+        )
 
         if coluna in base.columns:
 
-            if base[coluna].notna().any():
-                avaliacoes.append(avaliacao)
+            if base[
+                coluna
+            ].notna().any():
 
-    indicadores["AVALIACOES"] = avaliacoes
+                avaliacoes.append(
+                    avaliacao
+                )
 
-    # ------------------------------------------------------
-    # Participação média
-    # ------------------------------------------------------
+    indicadores[
+        "AVALIACOES"
+    ] = avaliacoes
+
+    # ======================================================
+    # PARTICIPAÇÃO MÉDIA
+    # ======================================================
 
     for avaliacao in AVALIACOES:
 
-        coluna = f"PART_{avaliacao}"
+        coluna = (
+            f"PART_{avaliacao}"
+        )
 
         if coluna in base.columns:
 
-            indicadores[coluna] = (
-                base[coluna].mean()
-            )
+            indicadores[
+                coluna
+            ] = base[coluna].mean()
 
-    # ------------------------------------------------------
-    # Médias gerais
-    # ------------------------------------------------------
+    # ======================================================
+    # MÉDIAS GERAIS
+    # ======================================================
 
     for avaliacao in [
         "PP1",
@@ -423,17 +601,19 @@ def calcular_indicadores(base: pd.DataFrame) -> dict:
         "PP3",
     ]:
 
-        coluna = f"MEDIA_{avaliacao}"
+        coluna = (
+            f"MEDIA_{avaliacao}"
+        )
 
         if coluna in base.columns:
 
-            indicadores[coluna] = (
-                base[coluna].mean()
-            )
+            indicadores[
+                coluna
+            ] = base[coluna].mean()
 
-    # ------------------------------------------------------
-    # Médias de LP
-    # ------------------------------------------------------
+    # ======================================================
+    # MÉDIAS DE LP
+    # ======================================================
 
     for avaliacao in [
         "PP1",
@@ -442,17 +622,19 @@ def calcular_indicadores(base: pd.DataFrame) -> dict:
         "PP3",
     ]:
 
-        coluna = f"LP_{avaliacao}"
+        coluna = (
+            f"LP_{avaliacao}"
+        )
 
         if coluna in base.columns:
 
-            indicadores[coluna] = (
-                base[coluna].mean()
-            )
+            indicadores[
+                coluna
+            ] = base[coluna].mean()
 
-    # ------------------------------------------------------
-    # Médias de MAT
-    # ------------------------------------------------------
+    # ======================================================
+    # MÉDIAS DE MAT
+    # ======================================================
 
     for avaliacao in [
         "PP1",
@@ -461,79 +643,208 @@ def calcular_indicadores(base: pd.DataFrame) -> dict:
         "PP3",
     ]:
 
-        coluna = f"MAT_{avaliacao}"
+        coluna = (
+            f"MAT_{avaliacao}"
+        )
 
         if coluna in base.columns:
 
-            indicadores[coluna] = (
-                base[coluna].mean()
-            )
+            indicadores[
+                coluna
+            ] = base[coluna].mean()
 
-    # ------------------------------------------------------
-    # Evolução média
-    # ------------------------------------------------------
+    # ======================================================
+    # EVOLUÇÃO MÉDIA
+    # ======================================================
 
     if "EVOLUCAO_LP" in base.columns:
 
-        indicadores["EVOLUCAO_MEDIA_LP"] = (
-            pd.to_numeric(
-                base["EVOLUCAO_LP"],
-                errors="coerce",
-            ).mean()
-        )
+        indicadores[
+            "EVOLUCAO_MEDIA_LP"
+        ] = pd.to_numeric(
+            base["EVOLUCAO_LP"],
+            errors="coerce",
+        ).mean()
 
     if "EVOLUCAO_MAT" in base.columns:
 
-        indicadores["EVOLUCAO_MEDIA_MAT"] = (
-            pd.to_numeric(
-                base["EVOLUCAO_MAT"],
-                errors="coerce",
-            ).mean()
-        )
+        indicadores[
+            "EVOLUCAO_MEDIA_MAT"
+        ] = pd.to_numeric(
+            base["EVOLUCAO_MAT"],
+            errors="coerce",
+        ).mean()
 
-    if "EVOLUCAO_PARTICIPACAO" in base.columns:
+    if (
+        "EVOLUCAO_PARTICIPACAO"
+        in base.columns
+    ):
 
-        indicadores["EVOLUCAO_MEDIA_PARTICIPACAO"] = (
-            pd.to_numeric(
-                base["EVOLUCAO_PARTICIPACAO"],
-                errors="coerce",
-            ).mean()
-        )
+        indicadores[
+            "EVOLUCAO_MEDIA_PARTICIPACAO"
+        ] = pd.to_numeric(
+            base[
+                "EVOLUCAO_PARTICIPACAO"
+            ],
+            errors="coerce",
+        ).mean()
 
-    # ------------------------------------------------------
-    # Histórico
-    # ------------------------------------------------------
+    # ======================================================
+    # HISTÓRICO
+    # ======================================================
 
-    if "SITUACAO_HISTORICO" in base.columns:
+    if (
+        "SITUACAO_HISTORICO"
+        in base.columns
+    ):
 
-        indicadores["NOVAS_ESCOLAS"] = (
-            base["SITUACAO_HISTORICO"]
-            .eq("NOVA_NO_ACOMPANHAMENTO")
+        indicadores[
+            "NOVAS_ESCOLAS"
+        ] = (
+            base[
+                "SITUACAO_HISTORICO"
+            ]
+            .eq(
+                "NOVA_NO_ACOMPANHAMENTO"
+            )
             .sum()
         )
 
-        indicadores["HISTORICO_INICIAL"] = (
-            base["SITUACAO_HISTORICO"]
-            .eq("HISTORICO_INICIAL")
+        indicadores[
+            "HISTORICO_INICIAL"
+        ] = (
+            base[
+                "SITUACAO_HISTORICO"
+            ]
+            .eq(
+                "HISTORICO_INICIAL"
+            )
             .sum()
         )
 
-        indicadores["HISTORICO_CONSOLIDADO"] = (
-            base["SITUACAO_HISTORICO"]
-            .eq("HISTORICO_CONSOLIDADO")
+        indicadores[
+            "HISTORICO_CONSOLIDADO"
+        ] = (
+            base[
+                "SITUACAO_HISTORICO"
+            ]
+            .eq(
+                "HISTORICO_CONSOLIDADO"
+            )
             .sum()
         )
 
+    # ======================================================
+    # FAROL URE
+    # ======================================================
+
+    # Inicializa todos os contadores.
+
+    indicadores[
+        "PRIORITARIA"
+    ] = 0
+
+    indicadores[
+        "ATENCAO"
+    ] = 0
+
+    indicadores[
+        "FAVORAVEL"
+    ] = 0
+
+    indicadores[
+        "SEM_HISTORICO"
+    ] = 0
+
     # ------------------------------------------------------
-    # Compatibilidade temporária
-    #
-    # O Farol ainda não foi calculado.
-    # Portanto, os contadores permanecem zerados.
+    # Conta a situação principal do Farol
     # ------------------------------------------------------
 
-    indicadores["PRIORITARIA"] = 0
-    indicadores["ATENCAO"] = 0
-    indicadores["DESTAQUE"] = 0
-    indicadores["SEM_DADOS"] = 0
+    if "FAROL_URE" in base.columns:
+
+        farol = (
+            base["FAROL_URE"]
+            .astype("string")
+            .str.upper()
+            .str.strip()
+        )
+
+        indicadores[
+            "PRIORITARIA"
+        ] = int(
+            farol.eq(
+                "PRIORITÁRIA"
+            ).sum()
+        )
+
+        indicadores[
+            "ATENCAO"
+        ] = int(
+            farol.eq(
+                "ATENÇÃO"
+            ).sum()
+        )
+
+        indicadores[
+            "FAVORAVEL"
+        ] = int(
+            farol.eq(
+                "FAVORÁVEL"
+            ).sum()
+        )
+
+        indicadores[
+            "SEM_HISTORICO"
+        ] = int(
+            farol.eq(
+                "SEM HISTÓRICO"
+            ).sum()
+        )
+
+    # ======================================================
+    # DESTAQUE DE EVOLUÇÃO
+    # ======================================================
+
+    indicadores[
+        "DESTAQUE_EVOLUCAO"
+    ] = 0
+
+    if (
+        "DESTAQUE_EVOLUCAO"
+        in base.columns
+    ):
+
+        indicadores[
+            "DESTAQUE_EVOLUCAO"
+        ] = int(
+            base[
+                "DESTAQUE_EVOLUCAO"
+            ]
+            .fillna(False)
+            .astype(bool)
+            .sum()
+        )
+
+    # ======================================================
+    # COMPATIBILIDADE
+    # ======================================================
+
+    # Mantém a chave DESTAQUE para versões
+    # anteriores do resumo.
+
+    indicadores[
+        "DESTAQUE"
+    ] = indicadores[
+        "DESTAQUE_EVOLUCAO"
+    ]
+
+    # Também disponibiliza SEM_DADOS
+    # para compatibilidade com versões anteriores.
+
+    indicadores[
+        "SEM_DADOS"
+    ] = indicadores[
+        "SEM_HISTORICO"
+    ]
 
     return indicadores
