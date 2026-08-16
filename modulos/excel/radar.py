@@ -1,3 +1,5 @@
+
+
 """
 ==========================================================
 RADAR PEDAGÓGICO URE
@@ -341,19 +343,14 @@ def aplicar_cor_farol(
 
 
 # ==========================================================
-# COR DOS GRUPOS DO CABEÇALHO
+# CORES DO CABEÇALHO
 # ==========================================================
 
 def aplicar_cores_cabecalho(
-    ws,
+    ws
 ):
-    """
-    Diferencia visualmente os grupos de avaliação
-    utilizando exclusivamente tons de azul.
-    """
 
     grupos = {
-
         "ADE": (
             [
                 "LP_ABAIXO",
@@ -409,6 +406,10 @@ def aplicar_cores_cabecalho(
         ),
     }
 
+    # ------------------------------------------------------
+    # Aplica as cores e a borda padrão
+    # ------------------------------------------------------
+
     for _, (
         colunas,
         cor,
@@ -427,7 +428,6 @@ def aplicar_cores_cabecalho(
             )
 
             if indice is None:
-
                 continue
 
             celula = ws.cell(
@@ -447,6 +447,54 @@ def aplicar_cores_cabecalho(
 
             celula.border = BORDA
 
+    # ------------------------------------------------------
+    # Separação visual entre os grupos
+    # ------------------------------------------------------
+
+    grupos_separacao = [
+        [
+            "MAT_ABAIXO",
+        ],
+        [
+            "MAT_PP1",
+        ],
+        [
+            "MAT_PP2",
+        ],
+        [
+            "PART_PP2",
+        ],
+        [
+            "EVOLUCAO_MAT",
+        ],
+    ]
+
+    for grupo in grupos_separacao:
+
+        for nome_coluna in grupo:
+
+            indice = obter_indice_coluna(
+                ws,
+                nome_coluna,
+            )
+
+            if indice is None:
+                continue
+
+            celula = ws.cell(
+                row=1,
+                column=indice,
+            )
+
+            celula.border = Border(
+                left=celula.border.left,
+                right=Side(
+                    style="medium",
+                    color="000000",
+                ),
+                top=celula.border.top,
+                bottom=celula.border.bottom,
+            )
 
 # ==========================================================
 # TEXTO DE DESTAQUE
