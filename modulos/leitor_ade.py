@@ -1,134 +1,233 @@
 """
 Responsabilidade:
-Ler a planilha ADE e devolver um DataFrame padronizado.
+Ler as planilhas ADE / 2ª AVD (ADP) e devolver
+um DataFrame padronizado.
+
+Estrutura das avaliações:
+
+    Participação
+    3 indicadores de LP
+    3 indicadores de MAT
+
+A primeira ocorrência dos níveis corresponde a LP.
+A segunda ocorrência corresponde a MAT.
+
+A identificação da escola ocorre pelo CIE.
+
+Na 2ª AVD/ADP, o CIE pode estar no final do nome:
+
+    NOME DA ESCOLA - 123456
 """
 
+import re
 import pandas as pd
 
 from modulos.utils import (
     localizar_coluna,
     padronizar_escola,
     converter_numero,
-    validar_colunas,
     padronizar_texto,
 )
 
 
 # ==========================================================
-# LOCALIZAÇÃO DAS COLUNAS ADE
+# LOCALIZAÇÃO DAS COLUNAS DE NÍVEL
 # ==========================================================
 
 def _localizar_colunas_nivel(df, nome_base):
-    """
-    Localiza as duas ocorrências de uma coluna da ADE.
-
-    A estrutura atual da ADE possui:
-
-        Abaixo do Básico
-        Básico
-        Proficiente
-
-        Abaixo do Básico.1
-        Básico.1
-        Proficiente.1
-
-    O primeiro conjunto corresponde a LP.
-    O segundo conjunto corresponde a MAT.
-    """
 
     resultado = []
 
-    nome_padrao = padronizar_texto(nome_base)
+    nome_padrao = padronizar_texto(
+        nome_base
+    )
 
     for coluna in df.columns:
 
-        coluna_padrao = padronizar_texto(coluna)
+        coluna_padrao = padronizar_texto(
+            coluna
+        )
 
         if coluna_padrao == nome_padrao:
-            resultado.append(coluna)
+
+            resultado.append(
+                coluna
+            )
+
             continue
 
-        if coluna_padrao.startswith(nome_padrao + "."):
-            resultado.append(coluna)
+        if coluna_padrao.startswith(
+            nome_padrao + "."
+        ):
+
+            resultado.append(
+                coluna
+            )
 
     return resultado
 
 
 # ==========================================================
-# LEITURA DA ADE
+# LOCALIZAÇÃO DA ESCOLA
+# ==========================================================
+
+def _localizar_escola(df):
+
+    return localizar_coluna(
+        df,
+        [
+            "ESCOLA",
+            "Escola",
+        ],
+    )
+
+
+# ==========================================================
+# LOCALIZAÇÃO DA PARTICIPAÇÃO
+# ==========================================================
+
+def _localizar_participacao(df):
+
+    candidatos = [
+
+        "PARTICIPACAO",
+
+        "PARTICIPAÇÃO",
+
+        "(%) PARTICIPACAO",
+
+        "(%) PARTICIPAÇÃO",
+
+        "% PARTICIPACAO",
+
+        "% PARTICIPAÇÃO",
+
+    ]
+
+    try:
+
+        return localizar_coluna(
+            df,
+            candidatos,
+        )
+
+    except Exception:
+
+        candidatos_normalizados = {
+            padronizar_texto(
+                candidato
+            )
+            for candidato in candidatos
+        }
+
+        for coluna in df.columns:
+
+            if (
+                padronizar_texto(
+                    coluna
+                )
+                in candidatos_normalizados
+            ):
+
+                return coluna
+
+    raise ValueError(
+        "Coluna de participação não localizada."
+    )
+
+
+# ==========================================================
+# LOCALIZAÇÃO DO CIE
+# ==========================================================
+
+def _localizar_cie(df):
+
+    try:
+
+        return localizar_coluna(
+            df,
+            ["CIE"],
+        )
+
+    except Exception:
+
+        return None
+
+
+# ==========================================================
+# EXTRAÇÃO DO CIE
+# ==========================================================
+
+def _extrair_cie_da_escola(valor):
+
+    if pd.isna(valor):
+
+        return pd.NA
+
+    texto = str(
+        valor
+    ).strip()
+
+    # ------------------------------------------------------
+    # Formato esperado:
+    #
+    # NOME DA ESCOLA - 123456
+    # ------------------------------------------------------
+
+    encontrado = re.search(
+        r"-\s*(\d+)\s*$",
+        texto,
+    )
+
+    if encontrado:
+
+        return int(
+            encontrado.group(1)
+        )
+
+    return pd.NA
+
+
+# ==========================================================
+# LEITURA DA ADE / ADP
 # ==========================================================
 
 def ler_ADE(arquivo):
-    """
-    Lê a planilha ADE e devolve um DataFrame padronizado.
 
-    Retorno:
+    # ======================================================
+    # LEITURA
+    # ======================================================
 
-        CIE
-        ESCOLA
-        PART_ADE
+    df = pd.read_excel(
+        arquivo
+    )
 
-        LP_ABAIXO
-        LP_BASICO
-        LP_PROFICIENTE
-
-        MAT_ABAIXO
-        MAT_BASICO
-        MAT_PROFICIENTE
-    """
-
-    # ------------------------------------------------------
-    # Leitura da planilha
-    # ------------------------------------------------------
-
-    df = pd.read_excel(arquivo)
-
-    # Padroniza apenas os nomes das colunas
     df.columns = [
         str(coluna).strip()
         for coluna in df.columns
     ]
 
-    # ------------------------------------------------------
-    # Validação das colunas principais
-    # ------------------------------------------------------
 
-    validar_colunas(
-        df,
-        [
-            "CIE",
-            "ESCOLA",
-            "PARTICIPACAO",
-        ],
+    # ======================================================
+    # LOCALIZAÇÃO DAS COLUNAS
+    # ======================================================
+
+    col_escola = _localizar_escola(
+        df
     )
 
-    # ------------------------------------------------------
-    # Localiza as colunas principais
-    # ------------------------------------------------------
-
-    col_cie = localizar_coluna(
-        df,
-        ["CIE"],
+    col_part = _localizar_participacao(
+        df
     )
 
-    col_escola = localizar_coluna(
-        df,
-        ["ESCOLA"],
+    col_cie = _localizar_cie(
+        df
     )
 
-    col_part = localizar_coluna(
-        df,
-        [
-            "PARTICIPACAO",
-            "PARTICIPAÇÃO",
-            "(%) PARTICIPACAO",
-            "(%) PARTICIPAÇÃO",
-        ],
-    )
 
-    # ------------------------------------------------------
-    # Localiza os dois conjuntos de níveis
-    # ------------------------------------------------------
+    # ======================================================
+    # NÍVEIS
+    # ======================================================
 
     col_ab = _localizar_colunas_nivel(
         df,
@@ -145,118 +244,160 @@ def ler_ADE(arquivo):
         "PROFICIENTE",
     )
 
-    # ------------------------------------------------------
-    # Validação da estrutura da ADE
-    # ------------------------------------------------------
+
+    # ======================================================
+    # VALIDAÇÃO
+    # ======================================================
 
     if len(col_ab) < 2:
+
         raise ValueError(
-            "A ADE não apresentou as duas colunas "
-            "esperadas para 'Abaixo do Básico'."
+            "A avaliação não apresentou as duas "
+            "colunas de Abaixo do Básico."
         )
+
 
     if len(col_bas) < 2:
+
         raise ValueError(
-            "A ADE não apresentou as duas colunas "
-            "esperadas para 'Básico'."
+            "A avaliação não apresentou as duas "
+            "colunas de Básico."
         )
+
 
     if len(col_prof) < 2:
+
         raise ValueError(
-            "A ADE não apresentou as duas colunas "
-            "esperadas para 'Proficiente'."
+            "A avaliação não apresentou as duas "
+            "colunas de Proficiente."
         )
 
-    # ------------------------------------------------------
-    # Monta a base padronizada
-    # ------------------------------------------------------
+
+    # ======================================================
+    # BASE
+    # ======================================================
 
     base = pd.DataFrame()
 
-    # ------------------------------------------------------
-    # CIE
-    # ------------------------------------------------------
 
-    base["CIE"] = (
-        pd.to_numeric(
+    # ======================================================
+    # CIE
+    # ======================================================
+
+    if col_cie is not None:
+
+        base["CIE"] = pd.to_numeric(
             df[col_cie],
             errors="coerce",
         )
-        .astype("Int64")
-    )
 
-    # ------------------------------------------------------
+    else:
+
+        base["CIE"] = (
+            df[col_escola]
+            .apply(
+                _extrair_cie_da_escola
+            )
+        )
+
+        base["CIE"] = pd.to_numeric(
+            base["CIE"],
+            errors="coerce",
+        )
+
+
+    # ======================================================
     # ESCOLA
-    # ------------------------------------------------------
+    # ======================================================
 
     base["ESCOLA"] = (
         df[col_escola]
-        .apply(padronizar_escola)
+        .apply(
+            padronizar_escola
+        )
+        .astype("string")
+        .str.strip()
     )
 
-    # ------------------------------------------------------
+
+    # ======================================================
     # PARTICIPAÇÃO
-    # ------------------------------------------------------
+    # ======================================================
 
     base["PART_ADE"] = (
         df[col_part]
-        .apply(converter_numero)
+        .apply(
+            converter_numero
+        )
     )
 
-    # ------------------------------------------------------
+
+    # ======================================================
     # LÍNGUA PORTUGUESA
-    #
-    # Primeiro conjunto encontrado na ADE
-    # ------------------------------------------------------
+    # ======================================================
 
     base["LP_ABAIXO"] = (
         df[col_ab[0]]
-        .apply(converter_numero)
+        .apply(
+            converter_numero
+        )
     )
 
     base["LP_BASICO"] = (
         df[col_bas[0]]
-        .apply(converter_numero)
+        .apply(
+            converter_numero
+        )
     )
 
     base["LP_PROFICIENTE"] = (
         df[col_prof[0]]
-        .apply(converter_numero)
+        .apply(
+            converter_numero
+        )
     )
 
-    # ------------------------------------------------------
+
+    # ======================================================
     # MATEMÁTICA
-    #
-    # Segundo conjunto encontrado na ADE
-    # ------------------------------------------------------
+    # ======================================================
 
     base["MAT_ABAIXO"] = (
         df[col_ab[1]]
-        .apply(converter_numero)
+        .apply(
+            converter_numero
+        )
     )
 
     base["MAT_BASICO"] = (
         df[col_bas[1]]
-        .apply(converter_numero)
+        .apply(
+            converter_numero
+        )
     )
 
     base["MAT_PROFICIENTE"] = (
         df[col_prof[1]]
-        .apply(converter_numero)
+        .apply(
+            converter_numero
+        )
     )
 
-    # ------------------------------------------------------
-    # LIMPEZA DOS REGISTROS
-    # ------------------------------------------------------
 
-    base["ESCOLA"] = (
-        base["ESCOLA"]
-        .astype(str)
-        .str.strip()
-    )
+    # ======================================================
+    # REMOVE LINHAS INVÁLIDAS
+    # ======================================================
 
     base = base[
-        ~base["ESCOLA"].isin(
+        base["ESCOLA"].notna()
+    ]
+
+
+    base = base[
+        ~base["ESCOLA"]
+        .astype(str)
+        .str.upper()
+        .isin(
             [
                 "",
                 "NAN",
@@ -266,33 +407,98 @@ def ler_ADE(arquivo):
         )
     ]
 
-    # ------------------------------------------------------
-    # Mantém somente registros com CIE válido
-    # ------------------------------------------------------
+
+    # ======================================================
+    # REMOVE LINHA TÉCNICA
+    # ======================================================
 
     base = base[
-        base["CIE"].notna()
+        ~base["ESCOLA"]
+        .astype(str)
+        .str.upper()
+        .str.startswith(
+            "FILTROS APLICADOS"
+        )
     ]
 
-    # ------------------------------------------------------
-    # Remove duplicidades de escola/CIE
-    # ------------------------------------------------------
+
+    # ======================================================
+    # IDENTIFICAÇÃO
+    #
+    # IMPORTANTE:
+    #
+    # Se houver CIE, ele será a identificação principal.
+    #
+    # A escola é utilizada apenas como apoio quando
+    # não houver CIE.
+    # ======================================================
+
+    base["CHAVE_ESCOLA"] = (
+        base["CIE"]
+        .map(
+            lambda valor:
+                (
+                    pd.NA
+                    if pd.isna(valor)
+                    else str(
+                        int(valor)
+                    )
+                )
+        )
+        .astype("string")
+    )
+
+
+    # ======================================================
+    # ESCOLAS SEM CIE
+    # ======================================================
+
+    sem_cie = (
+        base["CHAVE_ESCOLA"]
+        .isna()
+    )
+
+
+    base.loc[
+        sem_cie,
+        "CHAVE_ESCOLA",
+    ] = (
+        "ESCOLA_"
+        +
+        base.loc[
+            sem_cie,
+            "ESCOLA",
+        ]
+        .astype("string")
+        .str.strip()
+    )
+
+
+    # ======================================================
+    # REMOVE DUPLICIDADES
+    #
+    # O CIE é a identificação principal.
+    # ======================================================
 
     base = (
         base
         .drop_duplicates(
-            subset=["CIE"],
+            subset=[
+                "CHAVE_ESCOLA"
+            ],
             keep="first",
         )
     )
 
-    # ------------------------------------------------------
-    # Reinicia o índice
-    # ------------------------------------------------------
+
+    # ======================================================
+    # ORGANIZAÇÃO FINAL
+    # ======================================================
 
     base.reset_index(
         drop=True,
         inplace=True,
     )
+
 
     return base

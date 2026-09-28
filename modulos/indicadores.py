@@ -1,76 +1,173 @@
-"""
-==========================================================
-RADAR PEDAGÓGICO URE
-MÓDULO: indicadores.py
-Versão: 2.0
-==========================================================
-
-Responsabilidade:
-Calcular os principais indicadores do Radar Pedagógico URE.
-
-Este módulo mede os dados.
-
-A classificação do Farol, diagnóstico e encaminhamento
-são realizados em etapas próprias.
-
-IMPORTANTE:
-
-O Farol utilizado pelo Radar é o FAROL_URE.
-
-O FAROL SARESP da Prova Paulista não é utilizado
-para classificação da escola.
-"""
+# ==========================================================
+# RADAR PEDAGÓGICO URE
+# MÓDULO: indicadores.py
+# Versão: 3.1
+# Arquitetura: AVD1 + PP1 + PP2 + AVD2 + PP3
+# ==========================================================
 
 from datetime import datetime
 
 import pandas as pd
 
 
-# ==========================================================
-# CONFIGURAÇÃO DAS AVALIAÇÕES
-# ==========================================================
-
-AVALIACOES = [
-    "ADE",
-    "PP1",
-    "PP2",
-    "ADP",
-    "PP3",
-]
+AVALIACOES = ["AVD1", "PP1", "PP2", "AVD2", "PP3"]
 
 
 # ==========================================================
-# LOCALIZA A ÚLTIMA AVALIAÇÃO DISPONÍVEL
+# FUNÇÕES AUXILIARES
+# ==========================================================
+
+def _primeira_coluna_existente(linha, colunas):
+    for coluna in colunas:
+        if coluna in linha.index and pd.notna(linha[coluna]):
+            return linha[coluna]
+
+    return pd.NA
+
+
+def _primeira_coluna_base(base, colunas):
+    for coluna in colunas:
+        if coluna in base.columns:
+            return coluna
+
+    return None
+
+
+def _valor_numerico(valor):
+    try:
+        if pd.isna(valor):
+            return pd.NA
+
+        return float(valor)
+
+    except (TypeError, ValueError):
+        return pd.NA
+
+
+# ==========================================================
+# COMPATIBILIDADE DO ADP
+# ==========================================================
+
+def _garantir_participacao_avd2(base):
+    """
+    O arquivo ADP contém AVD1 + AVD2 no mesmo arquivo.
+
+    O leitor_adp mantém a participação atual do ADP em
+    PART_ADP. Para o histórico do Radar, essa participação
+    corresponde à AVD2.
+
+    Portanto:
+
+        PART_ADP -> PART_AVD2
+
+    somente quando PART_AVD2 ainda não existir.
+
+    Não é criada PART_AVD1 artificialmente.
+    """
+
+    resultado = base.copy()
+
+    if (
+        "PART_AVD2" not in resultado.columns
+        and "PART_ADP" in resultado.columns
+    ):
+        resultado["PART_AVD2"] = resultado["PART_ADP"]
+
+    return resultado
+
+
+# ==========================================================
+# IDENTIFICAÇÃO DA EXISTÊNCIA DE CADA AVALIAÇÃO
+# ==========================================================
+
+def _tem_avaliacao(linha, avaliacao):
+    """
+    Identifica se a escola possui dados para determinada avaliação.
+
+    IMPORTANTE:
+
+    AVD1 e AVD2 estão no mesmo arquivo ADP e não possuem,
+    necessariamente, uma coluna PART_AVD1/PART_AVD2 independente.
+
+    Por isso a existência da avaliação é determinada pelos
+    dados efetivamente disponíveis.
+
+    Ausência de dados permanece ausência.
+    """
+
+    avaliacao = str(avaliacao).strip().upper()
+
+    if avaliacao == "AVD1":
+
+        colunas = [
+            "LP_AVD1_ABAIXO",
+            "MAT_AVD1_ABAIXO",
+            "LP_AVD1_ABAIXO_ANALISE",
+            "MAT_AVD1_ABAIXO_ANALISE",
+        ]
+
+    elif avaliacao == "AVD2":
+
+        colunas = [
+            "LP_AVD2_ABAIXO",
+            "MAT_AVD2_ABAIXO",
+            "LP_AVD2_ABAIXO_ANALISE",
+            "MAT_AVD2_ABAIXO_ANALISE",
+            "LP_ADP_ABAIXO",
+            "MAT_ADP_ABAIXO",
+            "ADP_LP_ABAIXO",
+            "ADP_MAT_ABAIXO",
+            "PART_AVD2",
+            "PART_ADP",
+        ]
+
+    elif avaliacao in ("PP1", "PP2", "PP3"):
+
+        colunas = [
+            f"LP_{avaliacao}",
+            f"MAT_{avaliacao}",
+            f"MEDIA_{avaliacao}",
+            f"PART_{avaliacao}",
+        ]
+
+    else:
+        return False
+
+    for coluna in colunas:
+
+        if coluna not in linha.index:
+            continue
+
+        valor = linha[coluna]
+
+        if pd.notna(valor):
+
+            if isinstance(valor, str) and valor.strip() == "":
+                continue
+
+            return True
+
+    return False
+
+
+# ==========================================================
+# ÚLTIMA AVALIAÇÃO
 # ==========================================================
 
 def obter_ultima_avaliacao(linha):
     """
-    Identifica a última avaliação disponível para a escola.
+    Retorna a última avaliação disponível na sequência:
 
-    Ordem:
+        AVD1 → PP1 → PP2 → AVD2 → PP3
 
-        PP3
-        ADP
-        PP2
-        PP1
-        ADE
+    A existência da avaliação não depende exclusivamente
+    da participação.
     """
 
     for avaliacao in reversed(AVALIACOES):
 
-        coluna_participacao = (
-            f"PART_{avaliacao}"
-        )
-
-        if coluna_participacao in linha.index:
-
-            valor = linha[
-                coluna_participacao
-            ]
-
-            if pd.notna(valor):
-
-                return avaliacao
+        if _tem_avaliacao(linha, avaliacao):
+            return avaliacao
 
     return None
 
@@ -79,122 +176,131 @@ def obter_ultima_avaliacao(linha):
 # EVOLUÇÃO
 # ==========================================================
 
-def calcular_evolucao(
-    linha,
-    componente,
-):
-    """
-    Calcula a evolução entre as duas últimas
-    avaliações disponíveis.
-
-    Componente:
-
-        LP
-        MAT
-
-    Retorno:
-
-        diferença em escala decimal.
-
-    Exemplo:
-
-        PP1 = 0.40
-        PP2 = 0.45
-
-        evolução = +0.05
-    """
-
-    avaliacoes_disponiveis = []
-
-    for avaliacao in [
-        "PP1",
-        "PP2",
-        "ADP",
-        "PP3",
-    ]:
-
-        coluna = (
-            f"{componente}_{avaliacao}"
-        )
-
-        if coluna in linha.index:
-
-            valor = linha[coluna]
-
-            if pd.notna(valor):
-
-                avaliacoes_disponiveis.append(
-                    (
-                        avaliacao,
-                        float(valor),
-                    )
-                )
-
-    if len(
-        avaliacoes_disponiveis
-    ) < 2:
-
-        return pd.NA
-
-    anterior = (
-        avaliacoes_disponiveis[-2][1]
-    )
-
-    atual = (
-        avaliacoes_disponiveis[-1][1]
-    )
-
-    return atual - anterior
-
-
-# ==========================================================
-# EVOLUÇÃO DA PARTICIPAÇÃO
-# ==========================================================
-
-def calcular_evolucao_participacao(
-    linha,
-):
-    """
-    Calcula a evolução da participação entre
-    as duas últimas avaliações disponíveis.
-    """
-
-    avaliacoes_disponiveis = []
+def calcular_evolucao(linha, componente):
+    valores = []
 
     for avaliacao in AVALIACOES:
 
-        coluna = (
-            f"PART_{avaliacao}"
+        coluna = f"{componente}_{avaliacao}"
+
+        if coluna not in linha.index:
+            continue
+
+        valor = _valor_numerico(
+            linha[coluna]
         )
 
-        if coluna in linha.index:
-
-            valor = linha[coluna]
-
-            if pd.notna(valor):
-
-                avaliacoes_disponiveis.append(
-                    (
-                        avaliacao,
-                        float(valor),
-                    )
+        if pd.notna(valor):
+            valores.append(
+                (
+                    avaliacao,
+                    valor,
                 )
+            )
 
-    if len(
-        avaliacoes_disponiveis
-    ) < 2:
-
+    if len(valores) < 2:
         return pd.NA
 
-    anterior = (
-        avaliacoes_disponiveis[-2][1]
+    return (
+        valores[-1][1]
+        - valores[-2][1]
     )
 
-    atual = (
-        avaliacoes_disponiveis[-1][1]
+
+def calcular_evolucao_participacao(linha):
+    valores = []
+
+    for avaliacao in AVALIACOES:
+
+        coluna = f"PART_{avaliacao}"
+
+        if coluna not in linha.index:
+            continue
+
+        valor = _valor_numerico(
+            linha[coluna]
+        )
+
+        if pd.notna(valor):
+
+            valores.append(
+                (
+                    avaliacao,
+                    valor,
+                )
+            )
+
+    if len(valores) < 2:
+        return pd.NA
+
+    return (
+        valores[-1][1]
+        - valores[-2][1]
     )
 
-    return atual - anterior
+
+# ==========================================================
+# ABAIXO DO BÁSICO — AVD1 / AVD2
+# ==========================================================
+
+def obter_abaixo_basico(
+    linha,
+    avaliacao,
+    componente,
+):
+    """
+    Obtém o Abaixo do Básico de AVD1 ou AVD2.
+    """
+
+    avaliacao = str(
+        avaliacao
+    ).strip().upper()
+
+    componente = str(
+        componente
+    ).strip().upper()
+
+    if avaliacao not in (
+        "AVD1",
+        "AVD2",
+    ):
+        return pd.NA
+
+    if componente == "LP":
+
+        colunas = [
+            f"LP_{avaliacao}_ABAIXO"
+        ]
+
+        if avaliacao == "AVD2":
+
+            colunas += [
+                "LP_ADP_ABAIXO",
+                "ADP_LP_ABAIXO",
+                "ADP_ABAIXO_LP",
+            ]
+
+    elif componente == "MAT":
+
+        colunas = [
+            f"MAT_{avaliacao}_ABAIXO"
+        ]
+
+        if avaliacao == "AVD2":
+
+            colunas += [
+                "MAT_ADP_ABAIXO",
+                "ADP_MAT_ABAIXO",
+                "ADP_ABAIXO_MAT",
+            ]
+
+    else:
+        return pd.NA
+
+    return _primeira_coluna_existente(
+        linha,
+        colunas,
+    )
 
 
 # ==========================================================
@@ -204,86 +310,72 @@ def calcular_evolucao_participacao(
 def calcular_indicadores_escolas(
     base: pd.DataFrame,
 ) -> pd.DataFrame:
-    """
-    Calcula os indicadores individuais de cada escola.
-
-    Esta função NÃO classifica o Farol.
-
-    Ela prepara os indicadores que serão utilizados
-    pelo Farol, diagnóstico e encaminhamento.
-    """
 
     if base is None or base.empty:
-
         return base
 
-    resultado = base.copy()
-
-    # ======================================================
-    # ÚLTIMA AVALIAÇÃO DISPONÍVEL
-    # ======================================================
-
-    resultado[
-        "ULTIMA_AVALIACAO"
-    ] = resultado.apply(
-        obter_ultima_avaliacao,
-        axis=1,
+    resultado = _garantir_participacao_avd2(
+        base
     )
 
-    # ======================================================
-    # EVOLUÇÃO DE LP
-    # ======================================================
+    # ------------------------------------------------------
+    # ÚLTIMA AVALIAÇÃO
+    # ------------------------------------------------------
 
-    resultado[
-        "EVOLUCAO_LP"
-    ] = resultado.apply(
-        lambda linha: calcular_evolucao(
-            linha,
-            "LP",
-        ),
-        axis=1,
+    resultado["ULTIMA_AVALIACAO"] = (
+        resultado.apply(
+            obter_ultima_avaliacao,
+            axis=1,
+        )
     )
 
-    # ======================================================
-    # EVOLUÇÃO DE MAT
-    # ======================================================
+    # ------------------------------------------------------
+    # EVOLUÇÃO
+    # ------------------------------------------------------
 
-    resultado[
-        "EVOLUCAO_MAT"
-    ] = resultado.apply(
-        lambda linha: calcular_evolucao(
-            linha,
-            "MAT",
-        ),
-        axis=1,
+    resultado["EVOLUCAO_LP"] = (
+        resultado.apply(
+            lambda linha:
+                calcular_evolucao(
+                    linha,
+                    "LP",
+                ),
+            axis=1,
+        )
     )
 
-    # ======================================================
-    # EVOLUÇÃO DA PARTICIPAÇÃO
-    # ======================================================
-
-    resultado[
-        "EVOLUCAO_PARTICIPACAO"
-    ] = resultado.apply(
-        calcular_evolucao_participacao,
-        axis=1,
+    resultado["EVOLUCAO_MAT"] = (
+        resultado.apply(
+            lambda linha:
+                calcular_evolucao(
+                    linha,
+                    "MAT",
+                ),
+            axis=1,
+        )
     )
 
-    # ======================================================
-    # VALOR DA ÚLTIMA AVALIAÇÃO
-    # ======================================================
+    resultado["EVOLUCAO_PARTICIPACAO"] = (
+        resultado.apply(
+            calcular_evolucao_participacao,
+            axis=1,
+        )
+    )
+
+    # ------------------------------------------------------
+    # VALOR ATUAL
+    # ------------------------------------------------------
 
     def obter_valor_ultima(
         linha,
         prefixo,
     ):
 
-        avaliacao = (
-            linha["ULTIMA_AVALIACAO"]
-        )
+        avaliacao = linha[
+            "ULTIMA_AVALIACAO"
+        ]
 
         if not avaliacao:
-
             return pd.NA
 
         coluna = (
@@ -291,177 +383,172 @@ def calcular_indicadores_escolas(
         )
 
         if coluna not in linha.index:
-
             return pd.NA
 
         return linha[coluna]
 
-    # ------------------------------------------------------
-    # PARTICIPAÇÃO ATUAL
-    # ------------------------------------------------------
-
-    resultado[
-        "PARTICIPACAO_ATUAL"
-    ] = resultado.apply(
-        lambda linha: obter_valor_ultima(
-            linha,
+    for nome, prefixo in [
+        (
+            "PARTICIPACAO_ATUAL",
             "PART",
         ),
-        axis=1,
-    )
-
-    # ------------------------------------------------------
-    # LP ATUAL
-    # ------------------------------------------------------
-
-    resultado[
-        "LP_ATUAL"
-    ] = resultado.apply(
-        lambda linha: obter_valor_ultima(
-            linha,
+        (
+            "LP_ATUAL",
             "LP",
         ),
-        axis=1,
-    )
-
-    # ------------------------------------------------------
-    # MAT ATUAL
-    # ------------------------------------------------------
-
-    resultado[
-        "MAT_ATUAL"
-    ] = resultado.apply(
-        lambda linha: obter_valor_ultima(
-            linha,
+        (
+            "MAT_ATUAL",
             "MAT",
         ),
-        axis=1,
-    )
+        (
+            "MEDIA_ATUAL",
+            "MEDIA",
+        ),
+    ]:
+
+        resultado[nome] = (
+            resultado.apply(
+                lambda linha,
+                p=prefixo:
+                    obter_valor_ultima(
+                        linha,
+                        p,
+                    ),
+                axis=1,
+            )
+        )
 
     # ------------------------------------------------------
-    # MÉDIA ATUAL
+    # AVD1
     # ------------------------------------------------------
 
     resultado[
-        "MEDIA_ATUAL"
+        "LP_AVD1_ABAIXO_ANALISE"
     ] = resultado.apply(
-        lambda linha: obter_valor_ultima(
-            linha,
-            "MEDIA",
-        ),
+        lambda linha:
+            obter_abaixo_basico(
+                linha,
+                "AVD1",
+                "LP",
+            ),
         axis=1,
     )
 
-    # ======================================================
-    # DIFERENÇA LP X MAT
-    # ======================================================
+    resultado[
+        "MAT_AVD1_ABAIXO_ANALISE"
+    ] = resultado.apply(
+        lambda linha:
+            obter_abaixo_basico(
+                linha,
+                "AVD1",
+                "MAT",
+            ),
+        axis=1,
+    )
+
+    # ------------------------------------------------------
+    # AVD2
+    # ------------------------------------------------------
+
+    resultado[
+        "LP_AVD2_ABAIXO_ANALISE"
+    ] = resultado.apply(
+        lambda linha:
+            obter_abaixo_basico(
+                linha,
+                "AVD2",
+                "LP",
+            ),
+        axis=1,
+    )
+
+    resultado[
+        "MAT_AVD2_ABAIXO_ANALISE"
+    ] = resultado.apply(
+        lambda linha:
+            obter_abaixo_basico(
+                linha,
+                "AVD2",
+                "MAT",
+            ),
+        axis=1,
+    )
+
+    # ------------------------------------------------------
+    # DIFERENÇA LP x MAT
+    # ------------------------------------------------------
 
     resultado[
         "DIF_LP_MAT_ATUAL"
     ] = (
-        resultado["LP_ATUAL"]
-        - resultado["MAT_ATUAL"]
+        pd.to_numeric(
+            resultado["LP_ATUAL"],
+            errors="coerce",
+        )
+        -
+        pd.to_numeric(
+            resultado["MAT_ATUAL"],
+            errors="coerce",
+        )
     )
 
-    # ======================================================
+    # ------------------------------------------------------
     # QUANTIDADE DE AVALIAÇÕES
-    # ======================================================
-
-    def contar_avaliacoes(
-        linha,
-    ):
-
-        total = 0
-
-        for avaliacao in AVALIACOES:
-
-            coluna = (
-                f"PART_{avaliacao}"
-            )
-
-            if coluna in linha.index:
-
-                if pd.notna(
-                    linha[coluna]
-                ):
-
-                    total += 1
-
-        return total
+    # ------------------------------------------------------
 
     resultado[
         "QTD_AVALIACOES"
     ] = resultado.apply(
-        contar_avaliacoes,
+        lambda linha:
+            sum(
+                _tem_avaliacao(
+                    linha,
+                    avaliacao,
+                )
+                for avaliacao in AVALIACOES
+            ),
         axis=1,
     )
 
-    # ======================================================
-    # PRESENÇA DAS AVALIAÇÕES
-    # ======================================================
+    # ------------------------------------------------------
+    # PRESENÇA EM CADA AVALIAÇÃO
+    # ------------------------------------------------------
 
-    resultado["TEM_ADE"] = (
-        resultado["PART_ADE"].notna()
-        if "PART_ADE"
-        in resultado.columns
-        else False
-    )
+    for avaliacao in AVALIACOES:
 
-    resultado["TEM_PP1"] = (
-        resultado["PART_PP1"].notna()
-        if "PART_PP1"
-        in resultado.columns
-        else False
-    )
+        resultado[
+            f"TEM_{avaliacao}"
+        ] = resultado.apply(
+            lambda linha,
+            a=avaliacao:
+                _tem_avaliacao(
+                    linha,
+                    a,
+                ),
+            axis=1,
+        )
 
-    resultado["TEM_PP2"] = (
-        resultado["PART_PP2"].notna()
-        if "PART_PP2"
-        in resultado.columns
-        else False
-    )
-
-    resultado["TEM_ADP"] = (
-        resultado["PART_ADP"].notna()
-        if "PART_ADP"
-        in resultado.columns
-        else False
-    )
-
-    resultado["TEM_PP3"] = (
-        resultado["PART_PP3"].notna()
-        if "PART_PP3"
-        in resultado.columns
-        else False
-    )
-
-    # ======================================================
+    # ------------------------------------------------------
     # SITUAÇÃO DO HISTÓRICO
-    # ======================================================
+    # ------------------------------------------------------
 
     def definir_historico(
-        linha,
+        linha
     ):
 
-        quantidade = (
-            linha["QTD_AVALIACOES"]
+        quantidade = int(
+            linha[
+                "QTD_AVALIACOES"
+            ]
         )
 
         if quantidade <= 1:
-
-            return (
-                "NOVA_NO_ACOMPANHAMENTO"
-            )
+            return "NOVA_NO_ACOMPANHAMENTO"
 
         if quantidade == 2:
+            return "HISTORICO_INICIAL"
 
-            return (
-                "HISTORICO_INICIAL"
-            )
-
-        return (
-            "HISTORICO_CONSOLIDADO"
-        )
+        return "HISTORICO_CONSOLIDADO"
 
     resultado[
         "SITUACAO_HISTORICO"
@@ -474,85 +561,39 @@ def calcular_indicadores_escolas(
 
 
 # ==========================================================
-# INDICADORES GERAIS DA URE
+# INDICADORES GERAIS
 # ==========================================================
 
 def calcular_indicadores(
     base: pd.DataFrame,
 ) -> dict:
-    """
-    Calcula os indicadores gerais da URE.
 
-    IMPORTANTE:
-
-    A classificação principal é obtida diretamente
-    da coluna FAROL_URE.
-
-    O Farol SARESP da SEDUC não é utilizado.
-
-    Também são calculados separadamente os destaques
-    de evolução.
-    """
-
-    indicadores = {}
-
-    # ======================================================
-    # BASE VAZIA
-    # ======================================================
+    indicadores = {
+        "DATA_GERACAO": datetime.now(),
+        "TOTAL_ESCOLAS": 0,
+        "AVALIACOES": [],
+    }
 
     if base is None or base.empty:
-
-        indicadores[
-            "DATA_GERACAO"
-        ] = datetime.now()
-
-        indicadores[
-            "TOTAL_ESCOLAS"
-        ] = 0
-
-        indicadores[
-            "AVALIACOES"
-        ] = []
-
-        indicadores[
-            "PRIORITARIA"
-        ] = 0
-
-        indicadores[
-            "ATENCAO"
-        ] = 0
-
-        indicadores[
-            "FAVORAVEL"
-        ] = 0
-
-        indicadores[
-            "DESTAQUE_EVOLUCAO"
-        ] = 0
-
-        indicadores[
-            "SEM_HISTORICO"
-        ] = 0
-
         return indicadores
 
-    # ======================================================
-    # INFORMAÇÕES GERAIS
-    # ======================================================
-
-    indicadores[
-        "DATA_GERACAO"
-    ] = datetime.now()
+    base = _garantir_participacao_avd2(
+        base
+    )
 
     indicadores[
         "TOTAL_ESCOLAS"
     ] = len(base)
 
-    # ======================================================
+    # ------------------------------------------------------
     # AVALIAÇÕES DISPONÍVEIS
-    # ======================================================
+    # ------------------------------------------------------
 
-    avaliacoes = []
+    base_indicadores = (
+        calcular_indicadores_escolas(
+            base
+        )
+    )
 
     for avaliacao in AVALIACOES:
 
@@ -560,185 +601,187 @@ def calcular_indicadores(
             f"PART_{avaliacao}"
         )
 
-        if coluna in base.columns:
+        possui = base_indicadores.apply(
+            lambda linha,
+            a=avaliacao:
+                _tem_avaliacao(
+                    linha,
+                    a,
+                ),
+            axis=1,
+        ).any()
 
-            if base[
-                coluna
-            ].notna().any():
-
-                avaliacoes.append(
-                    avaliacao
-                )
-
-    indicadores[
-        "AVALIACOES"
-    ] = avaliacoes
-
-    # ======================================================
-    # PARTICIPAÇÃO MÉDIA
-    # ======================================================
-
-    for avaliacao in AVALIACOES:
-
-        coluna = (
-            f"PART_{avaliacao}"
-        )
+        if possui:
+            indicadores[
+                "AVALIACOES"
+            ].append(
+                avaliacao
+            )
 
         if coluna in base.columns:
 
             indicadores[
                 coluna
-            ] = base[coluna].mean()
+            ] = pd.to_numeric(
+                base[coluna],
+                errors="coerce",
+            ).mean()
 
-    # ======================================================
-    # MÉDIAS GERAIS
-    # ======================================================
+    # ------------------------------------------------------
+    # DIAGNÓSTICOS AVD1 / AVD2
+    # ------------------------------------------------------
 
-    for avaliacao in [
-        "PP1",
-        "PP2",
-        "ADP",
-        "PP3",
-    ]:
+    campos_diagnosticos = {
 
-        coluna = (
-            f"MEDIA_{avaliacao}"
-        )
+        "ABAIXO_BASICO_LP_AVD1": [
+            "LP_AVD1_ABAIXO",
+            "LP_AVD1_ABAIXO_ANALISE",
+        ],
 
-        if coluna in base.columns:
+        "ABAIXO_BASICO_MAT_AVD1": [
+            "MAT_AVD1_ABAIXO",
+            "MAT_AVD1_ABAIXO_ANALISE",
+        ],
 
-            indicadores[
-                coluna
-            ] = base[coluna].mean()
+        "ABAIXO_BASICO_LP_AVD2": [
+            "LP_AVD2_ABAIXO",
+            "LP_AVD2_ABAIXO_ANALISE",
+            "LP_ADP_ABAIXO",
+            "ADP_LP_ABAIXO",
+        ],
 
-    # ======================================================
-    # MÉDIAS DE LP
-    # ======================================================
+        "ABAIXO_BASICO_MAT_AVD2": [
+            "MAT_AVD2_ABAIXO",
+            "MAT_AVD2_ABAIXO_ANALISE",
+            "MAT_ADP_ABAIXO",
+            "ADP_MAT_ABAIXO",
+        ],
+    }
 
-    for avaliacao in [
-        "PP1",
-        "PP2",
-        "ADP",
-        "PP3",
-    ]:
-
-        coluna = (
-            f"LP_{avaliacao}"
-        )
-
-        if coluna in base.columns:
-
-            indicadores[
-                coluna
-            ] = base[coluna].mean()
-
-    # ======================================================
-    # MÉDIAS DE MAT
-    # ======================================================
-
-    for avaliacao in [
-        "PP1",
-        "PP2",
-        "ADP",
-        "PP3",
-    ]:
-
-        coluna = (
-            f"MAT_{avaliacao}"
-        )
-
-        if coluna in base.columns:
-
-            indicadores[
-                coluna
-            ] = base[coluna].mean()
-
-    # ======================================================
-    # EVOLUÇÃO MÉDIA
-    # ======================================================
-
-    if "EVOLUCAO_LP" in base.columns:
-
-        indicadores[
-            "EVOLUCAO_MEDIA_LP"
-        ] = pd.to_numeric(
-            base["EVOLUCAO_LP"],
-            errors="coerce",
-        ).mean()
-
-    if "EVOLUCAO_MAT" in base.columns:
-
-        indicadores[
-            "EVOLUCAO_MEDIA_MAT"
-        ] = pd.to_numeric(
-            base["EVOLUCAO_MAT"],
-            errors="coerce",
-        ).mean()
-
-    if (
-        "EVOLUCAO_PARTICIPACAO"
-        in base.columns
+    for nome, colunas in (
+        campos_diagnosticos.items()
     ):
 
-        indicadores[
-            "EVOLUCAO_MEDIA_PARTICIPACAO"
-        ] = pd.to_numeric(
-            base[
-                "EVOLUCAO_PARTICIPACAO"
-            ],
-            errors="coerce",
-        ).mean()
+        coluna = (
+            _primeira_coluna_base(
+                base,
+                colunas,
+            )
+        )
 
-    # ======================================================
+        if coluna is not None:
+
+            indicadores[
+                nome
+            ] = pd.to_numeric(
+                base[coluna],
+                errors="coerce",
+            ).mean()
+
+    # ------------------------------------------------------
+    # MÉDIAS DAS PP
+    # ------------------------------------------------------
+
+    for avaliacao in [
+        "PP1",
+        "PP2",
+        "PP3",
+    ]:
+
+        for prefixo in [
+            "MEDIA",
+            "LP",
+            "MAT",
+        ]:
+
+            coluna = (
+                f"{prefixo}_{avaliacao}"
+            )
+
+            if coluna in base.columns:
+
+                indicadores[
+                    coluna
+                ] = pd.to_numeric(
+                    base[coluna],
+                    errors="coerce",
+                ).mean()
+
+    # ------------------------------------------------------
+    # MÉDIAS DE EVOLUÇÃO
+    # ------------------------------------------------------
+
+    for coluna_base, nome in [
+
+        (
+            "EVOLUCAO_LP",
+            "EVOLUCAO_MEDIA_LP",
+        ),
+
+        (
+            "EVOLUCAO_MAT",
+            "EVOLUCAO_MEDIA_MAT",
+        ),
+
+        (
+            "EVOLUCAO_PARTICIPACAO",
+            "EVOLUCAO_MEDIA_PARTICIPACAO",
+        ),
+    ]:
+
+        if coluna_base in base_indicadores.columns:
+
+            indicadores[
+                nome
+            ] = pd.to_numeric(
+                base_indicadores[
+                    coluna_base
+                ],
+                errors="coerce",
+            ).mean()
+
+    # ------------------------------------------------------
     # HISTÓRICO
-    # ======================================================
+    # ------------------------------------------------------
 
     if (
         "SITUACAO_HISTORICO"
-        in base.columns
+        in base_indicadores.columns
     ):
 
         indicadores[
             "NOVAS_ESCOLAS"
-        ] = (
-            base[
+        ] = int(
+            base_indicadores[
                 "SITUACAO_HISTORICO"
-            ]
-            .eq(
+            ].eq(
                 "NOVA_NO_ACOMPANHAMENTO"
-            )
-            .sum()
+            ).sum()
         )
 
         indicadores[
             "HISTORICO_INICIAL"
-        ] = (
-            base[
+        ] = int(
+            base_indicadores[
                 "SITUACAO_HISTORICO"
-            ]
-            .eq(
+            ].eq(
                 "HISTORICO_INICIAL"
-            )
-            .sum()
+            ).sum()
         )
 
         indicadores[
             "HISTORICO_CONSOLIDADO"
-        ] = (
-            base[
+        ] = int(
+            base_indicadores[
                 "SITUACAO_HISTORICO"
-            ]
-            .eq(
+            ].eq(
                 "HISTORICO_CONSOLIDADO"
-            )
-            .sum()
+            ).sum()
         )
 
-    # ======================================================
-    # FAROL URE
-    # ======================================================
-
-    # Inicializa todos os contadores.
+    # ------------------------------------------------------
+    # FAROL
+    # ------------------------------------------------------
 
     indicadores[
         "PRIORITARIA"
@@ -755,10 +798,6 @@ def calcular_indicadores(
     indicadores[
         "SEM_HISTORICO"
     ] = 0
-
-    # ------------------------------------------------------
-    # Conta a situação principal do Farol
-    # ------------------------------------------------------
 
     if "FAROL_URE" in base.columns:
 
@@ -801,9 +840,9 @@ def calcular_indicadores(
             ).sum()
         )
 
-    # ======================================================
-    # DESTAQUE DE EVOLUÇÃO
-    # ======================================================
+    # ------------------------------------------------------
+    # DESTAQUES
+    # ------------------------------------------------------
 
     indicadores[
         "DESTAQUE_EVOLUCAO"
@@ -825,21 +864,11 @@ def calcular_indicadores(
             .sum()
         )
 
-    # ======================================================
-    # COMPATIBILIDADE
-    # ======================================================
-
-    # Mantém a chave DESTAQUE para versões
-    # anteriores do resumo.
-
     indicadores[
         "DESTAQUE"
     ] = indicadores[
         "DESTAQUE_EVOLUCAO"
     ]
-
-    # Também disponibiliza SEM_DADOS
-    # para compatibilidade com versões anteriores.
 
     indicadores[
         "SEM_DADOS"
